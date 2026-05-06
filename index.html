@@ -6,24 +6,66 @@
     <title>事務局専用｜景品交換スキャナー</title>
     <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js"></script>
     <style>
-        body { text-align: center; font-family: 'Helvetica Neue', Arial, sans-serif; background: #f4f4f9; margin: 0; padding: 20px; }
-        h1 { color: #333; font-size: 1.5rem; }
-        #wrapper { position: relative; width: 100%; max-width: 400px; margin: 0 auto; }
-        #canvas { width: 100%; border-radius: 12px; box-shadow: 0 4px 10px rgba(0,0,0,0.2); border: 4px solid #fff; }
-        #msg { margin-top: 20px; padding: 15px; border-radius: 8px; font-size: 18px; font-weight: bold; background: #fff; box-shadow: 0 2px 5px rgba(0,0,0,0.1); }
-        .status-wait { color: #666; }
+        body { 
+            text-align: center; 
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; 
+            background: #f0f2f5; 
+            margin: 0; 
+            padding: 20px; 
+            color: #333;
+        }
+        h1 { font-size: 1.2rem; margin-bottom: 20px; color: #1a73e8; }
+        
+        #wrapper { 
+            position: relative; 
+            width: 100%; 
+            max-width: 360px; 
+            margin: 0 auto; 
+            aspect-ratio: 1 / 1;
+            overflow: hidden;
+            border-radius: 20px;
+            background: #000;
+            border: 4px solid #fff;
+            box-shadow: 0 8px 20px rgba(0,0,0,0.15);
+        }
+        #canvas { width: 100%; height: 100%; object-fit: cover; }
+
+        #msg { 
+            margin-top: 25px; 
+            padding: 15px; 
+            border-radius: 12px; 
+            font-size: 16px; 
+            font-weight: bold; 
+            line-height: 1.5;
+            background: #fff;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+        }
+
+        /* 状態別スタイル */
+        .status-wait { color: #5f6368; }
+        .status-error { color: #d93025; background: #fce8e6 !important; }
         .status-sending { color: #e67e22; animation: blink 1s infinite; }
-        .status-success { color: #27ae60; background: #eafaf1 !important; }
+        .status-success { color: #188038; background: #e6f4ea !important; border: 2px solid #34a853; }
+
         @keyframes blink { 0% { opacity: 1; } 50% { opacity: 0.5; } 100% { opacity: 1; } }
+        
+        .hint { font-size: 12px; color: #777; margin-top: 10px; font-weight: normal; }
     </style>
 </head>
 <body>
+
     <h1>景品交換スキャナー</h1>
+
     <div id="wrapper">
         <video id="video" style="display:none"></video>
         <canvas id="canvas"></canvas>
     </div>
-    <div id="msg" class="status-wait">ユーザーのQRをスキャンしてください</div>
+
+    <div id="msg" class="status-wait">
+        カメラの起動を準備中...
+    </div>
+
+    <p class="hint">※カメラの利用許可を求めるポップアップが出たら<br>「許可」をタップしてください</p>
 
     <script>
         const video = document.getElementById("video");
@@ -36,27 +78,41 @@
 
         let isScanning = true;
 
-        navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } }).then(stream => {
-            video.srcObject = stream;
-            video.setAttribute("playsinline", true);
-            video.play();
-            requestAnimationFrame(tick);
-        });
+        // カメラ起動処理
+        function startCamera() {
+            navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } })
+            .then(stream => {
+                video.srcObject = stream;
+                video.setAttribute("playsinline", true); // iOS Safari対策
+                video.play();
+                msg.innerText = "QRコードを枠内に収めてください";
+                msg.className = "status-wait";
+                requestAnimationFrame(tick);
+            })
+            .catch(err => {
+                console.error(err);
+                msg.innerHTML = "【エラー】カメラを起動できません<br>ブラウザの設定でカメラ権限を許可してください";
+                msg.className = "status-error";
+            });
+        }
 
         function tick() {
             if (video.readyState === video.HAVE_ENOUGH_DATA && isScanning) {
                 canvas.height = video.videoHeight;
                 canvas.width = video.videoWidth;
                 ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+                
                 const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
                 const code = jsQR(imageData.data, imageData.width, imageData.height);
 
                 if (code) {
-                    isScanning = false;
+                    isScanning = false; // 二重送信防止
                     sendData(code.data);
                 }
             }
-            requestAnimationFrame(tick);
+            if (isScanning) {
+                requestAnimationFrame(tick);
+            }
         }
 
         function sendData(userId) {
@@ -65,23 +121,26 @@
 
             fetch(GAS_URL, {
                 method: "POST",
-                mode: "no-cors", // GASへの簡易POST
+                mode: "no-cors",
                 body: JSON.stringify({ userId: userId })
             })
             .then(() => {
-                msg.innerText = "送信完了！\nアプリを確認してください";
+                // 送信成功時の表示
+                msg.innerHTML = "送信完了！<br>下の「完了」ボタンを押して戻ってください";
                 msg.className = "status-success";
-                setTimeout(() => {
-                    msg.innerText = "次のスキャンをどうぞ";
-                    msg.className = "status-wait";
-                    isScanning = true;
-                }, 4000);
+                
+                // 完了バイブレーション（Androidのみ）
+                if (navigator.vibrate) navigator.vibrate(200);
             })
             .catch(err => {
-                alert("エラーが発生しました: " + err);
+                alert("送信エラーが発生しました: " + err);
                 isScanning = true;
+                msg.innerText = "エラー：再スキャンしてください";
             });
         }
+
+        // 実行開始
+        startCamera();
     </script>
 </body>
 </html>
