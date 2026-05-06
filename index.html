@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>事務局専用｜景品交換スキャナー</title>
+    <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js"></script>
+    <style>
+        body { text-align: center; font-family: 'Helvetica Neue', Arial, sans-serif; background: #f4f4f9; margin: 0; padding: 20px; }
+        h1 { color: #333; font-size: 1.5rem; }
+        #wrapper { position: relative; width: 100%; max-width: 400px; margin: 0 auto; }
+        #canvas { width: 100%; border-radius: 12px; box-shadow: 0 4px 10px rgba(0,0,0,0.2); border: 4px solid #fff; }
+        #msg { margin-top: 20px; padding: 15px; border-radius: 8px; font-size: 18px; font-weight: bold; background: #fff; box-shadow: 0 2px 5px rgba(0,0,0,0.1); }
+        .status-wait { color: #666; }
+        .status-sending { color: #e67e22; animation: blink 1s infinite; }
+        .status-success { color: #27ae60; background: #eafaf1 !important; }
+        @keyframes blink { 0% { opacity: 1; } 50% { opacity: 0.5; } 100% { opacity: 1; } }
+    </style>
+</head>
+<body>
+    <h1>景品交換スキャナー</h1>
+    <div id="wrapper">
+        <video id="video" style="display:none"></video>
+        <canvas id="canvas"></canvas>
+    </div>
+    <div id="msg" class="status-wait">ユーザーのQRをスキャンしてください</div>
+
+    <script>
+        const video = document.getElementById("video");
+        const canvas = document.getElementById("canvas");
+        const ctx = canvas.getContext("2d");
+        const msg = document.getElementById("msg");
+
+        // 【確定済み】あなたのGASウェブアプリURL
+        const GAS_URL = "https://script.google.com/macros/s/AKfycbwPTNdb1Y94X1L1-AM6bykD0gnNbHvoxqycEAs8XTSQPujLsl6ZRvUla0042zeUyG-5/exec";
+
+        let isScanning = true;
+
+        navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } }).then(stream => {
+            video.srcObject = stream;
+            video.setAttribute("playsinline", true);
+            video.play();
+            requestAnimationFrame(tick);
+        });
+
+        function tick() {
+            if (video.readyState === video.HAVE_ENOUGH_DATA && isScanning) {
+                canvas.height = video.videoHeight;
+                canvas.width = video.videoWidth;
+                ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+                const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+                const code = jsQR(imageData.data, imageData.width, imageData.height);
+
+                if (code) {
+                    isScanning = false;
+                    sendData(code.data);
+                }
+            }
+            requestAnimationFrame(tick);
+        }
+
+        function sendData(userId) {
+            msg.innerText = "判定中...";
+            msg.className = "status-sending";
+
+            fetch(GAS_URL, {
+                method: "POST",
+                mode: "no-cors", // GASへの簡易POST
+                body: JSON.stringify({ userId: userId })
+            })
+            .then(() => {
+                msg.innerText = "送信完了！\nアプリを確認してください";
+                msg.className = "status-success";
+                setTimeout(() => {
+                    msg.innerText = "次のスキャンをどうぞ";
+                    msg.className = "status-wait";
+                    isScanning = true;
+                }, 4000);
+            })
+            .catch(err => {
+                alert("エラーが発生しました: " + err);
+                isScanning = true;
+            });
+        }
+    </script>
+</body>
+</html>
