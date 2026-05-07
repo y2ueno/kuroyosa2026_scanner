@@ -13,19 +13,17 @@
         .status-sending { color: #e67e22; }
         .status-success { color: #188038; background: #e6f4ea !important; border: 2px solid #34a853; }
         .status-already { color: #d93025; background: #fce8e6 !important; border: 2px solid #d93025; }
-        .status-error { color: #d93025; background: #fce8e6 !important; }
     </style>
 </head>
 <body>
     <div id="wrapper"><video id="video" style="display:none"></video><canvas id="canvas"></canvas></div>
-    <div id="msg">スキャン中...</div>
+    <div id="msg">QRをスキャンしてください</div>
+
     <script>
         const video = document.getElementById("video");
         const canvas = document.getElementById("canvas");
         const ctx = canvas.getContext("2d");
         const msg = document.getElementById("msg");
-
-        // スペースを完全に排除したURL
         const GAS_URL = "https://script.google.com/macros/s/AKfycbx0fAcXHpHTFkGkBflIKY7m6DOqFhkJjX2oZc5zzwsECZ7NM8EuTo3cwSiq5OcRRSK6Vg/exec";
         const myUserId = new URLSearchParams(window.location.search).get('uid');
         let isScanning = true;
@@ -45,29 +43,34 @@
             if (isScanning) requestAnimationFrame(tick);
         }
 
+        // --- JSONP方式での送信 ---
         function sendData(spotId) {
             msg.innerText = "照合中..."; msg.className = "status-sending";
             
-            // 記号トラブルを防ぐため、あえて古い書き方でURLを作成
-            var finalUrl = GAS_URL + "?uid=" + encodeURIComponent(myUserId) + "&sid=" + encodeURIComponent(spotId);
-            
-            fetch(finalUrl)
-                .then(function(res) { return res.text(); })
-                .then(function(text) {
-                    var status = text.trim();
-                    if (status === "success") {
-                        msg.innerHTML = "スタンプを取得！"; msg.className = "status-success";
-                    } else if (status === "already") {
-                        msg.innerHTML = "取得済みです"; msg.className = "status-already";
-                    } else {
-                        throw new Error(status);
-                    }
-                })
-                .catch(function(err) {
-                    msg.innerText = "エラー: " + err; msg.className = "status-error";
-                    setTimeout(function() { isScanning = true; }, 3000);
-                });
+            // 古いスクリプトがあれば消す
+            const oldScript = document.getElementById("jsonp-script");
+            if (oldScript) oldScript.remove();
+
+            // 新しいスクリプトタグを作ってGASを叩く（これがiFrameを貫通します）
+            const script = document.createElement("script");
+            script.id = "jsonp-script";
+            script.src = GAS_URL + "?uid=" + encodeURIComponent(myUserId) + 
+                         "&sid=" + encodeURIComponent(spotId) + 
+                         "&callback=onResult";
+            document.body.appendChild(script);
         }
+
+        // GASからの返事を受け取る関数
+        window.onResult = function(res) {
+            if (res === "success") {
+                msg.innerHTML = "スタンプを取得しました！"; msg.className = "status-success";
+            } else if (res === "already") {
+                msg.innerHTML = "取得済みです"; msg.className = "status-already";
+            } else {
+                msg.innerText = "エラー: " + res;
+                setTimeout(() => { isScanning = true; }, 3000);
+            }
+        };
     </script>
 </body>
 </html>
