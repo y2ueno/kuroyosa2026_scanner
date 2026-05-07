@@ -1,110 +1,28 @@
-<!DOCTYPE html>
-<html lang="ja">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>よさこい2026｜スタンプ取得</title>
-    <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js"></script>
-    <style>
-        body { text-align: center; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #fff5e6; margin: 0; padding: 20px; color: #333; }
-        h1 { font-size: 1.2rem; margin-bottom: 20px; color: #e67e22; }
-        #wrapper { position: relative; width: 100%; max-width: 360px; margin: 0 auto; aspect-ratio: 1 / 1; overflow: hidden; border-radius: 20px; background: #000; border: 4px solid #fff; box-shadow: 0 8px 20px rgba(0,0,0,0.15); }
-        #canvas { width: 100%; height: 100%; object-fit: cover; }
-        #msg { margin-top: 25px; padding: 15px; border-radius: 12px; font-size: 16px; font-weight: bold; background: #fff; box-shadow: 0 2px 8px rgba(0,0,0,0.05); min-height: 60px; display: flex; align-items: center; justify-content: center; }
-        
-        .status-wait { color: #5f6368; }
-        .status-sending { color: #e67e22; animation: blink 1s infinite; }
-        .status-success { color: #188038; background: #e6f4ea !important; border: 2px solid #34a853; }
-        .status-already { color: #d93025; background: #fce8e6 !important; border: 2px solid #d93025; }
-        .status-error { color: #d93025; background: #fce8e6 !important; }
+/* --- sendData関数の中身だけ差し替えてもOKです --- */
+function sendData(spotId) {
+    msg.innerText = "チェック中...";
+    msg.className = "status-sending";
 
-        @keyframes blink { 0% { opacity: 1; } 50% { opacity: 0.5; } 100% { opacity: 1; } }
-    </style>
-</head>
-<body>
+    const requestUrl = `${GAS_URL}?uid=${encodeURIComponent(myUserId)}&sid=${encodeURIComponent(spotId)}`;
 
-    <h1>スポットQRを読み取る</h1>
-
-    <div id="wrapper">
-        <video id="video" style="display:none"></video>
-        <canvas id="canvas"></canvas>
-    </div>
-
-    <div id="msg" class="status-wait">カメラの起動を準備中...</div>
-
-    <script>
-        const video = document.getElementById("video");
-        const canvas = document.getElementById("canvas");
-        const ctx = canvas.getContext("2d");
-        const msg = document.getElementById("msg");
-
-        // ※あなたのGASウェブアプリURLに書き換えてください
-        const GAS_URL = "https://script.google.com/macros/s/AKfycbx0fAcXHpHTFkGkBflIKY7m6DOqFhkJjX2oZc5zzwsECZ7NM8EuTo3cwSiq5OcRRSK6Vg/exec";
-
-        const urlParams = new URLSearchParams(window.location.search);
-        const myUserId = urlParams.get('uid');
-        let isScanning = true;
-
-        if (!myUserId) {
-            msg.innerHTML = "【エラー】ユーザーIDがありません。<br>アプリから開き直してください。";
-            msg.className = "status-error";
-            isScanning = false;
+    fetch(requestUrl)
+    .then(res => res.text()) // JSONではなくテキストとして読み取る
+    .then(text => {
+        const result = text.trim();
+        if (result === "success") {
+            msg.innerHTML = "スタンプを取得しました！<br><span style='font-size:12px'>右上の「完了」で戻ってください</span>";
+            msg.className = "status-success";
+            if (navigator.vibrate) navigator.vibrate(200);
+        } else if (result === "already") {
+            msg.innerHTML = "このスタンプは取得済みです。<br><span style='font-size:12px'>他のスポットを探しましょう！</span>";
+            msg.className = "status-already";
+            if (navigator.vibrate) navigator.vibrate([100, 50, 100]);
+        } else {
+            throw new Error(result);
         }
-
-        function startCamera() {
-            if (!isScanning) return;
-            navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } })
-                .then(stream => {
-                    video.srcObject = stream;
-                    video.setAttribute("playsinline", true);
-                    video.play();
-                    msg.innerText = "QRコードを枠内に収めてください";
-                    requestAnimationFrame(tick);
-                });
-        }
-
-        function tick() {
-            if (video.readyState === video.HAVE_ENOUGH_DATA && isScanning) {
-                canvas.height = video.videoHeight;
-                canvas.width = video.videoWidth;
-                ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-                const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-                const code = jsQR(imageData.data, imageData.width, imageData.height);
-                if (code) {
-                    isScanning = false;
-                    sendData(code.data);
-                }
-            }
-            if (isScanning) requestAnimationFrame(tick);
-        }
-
-        function sendData(spotId) {
-            msg.innerText = "チェック中...";
-            msg.className = "status-sending";
-
-            // GASへGETで送信
-            const requestUrl = `${GAS_URL}?uid=${encodeURIComponent(myUserId)}&sid=${encodeURIComponent(spotId)}`;
-
-            fetch(requestUrl)
-            .then(res => res.json())
-            .then(data => {
-                if (data.status === "success") {
-                    msg.innerHTML = "スタンプを取得しました！<br><span style='font-size:12px'>右上の「完了」で戻ってください</span>";
-                    msg.className = "status-success";
-                    if (navigator.vibrate) navigator.vibrate(200);
-                } else if (data.status === "already") {
-                    msg.innerHTML = "このスタンプは取得済みです。<br><span style='font-size:12px'>他のスポットを探しましょう！</span>";
-                    msg.className = "status-already";
-                    if (navigator.vibrate) navigator.vibrate([100, 50, 100]);
-                }
-            })
-            .catch(err => {
-                msg.innerHTML = "エラーが発生しました。<br><button onclick='location.reload()'>再読み込み</button>";
-                msg.className = "status-error";
-            });
-        }
-
-        startCamera();
-    </script>
-</body>
-</html>
+    })
+    .catch(err => {
+        msg.innerHTML = "通信エラーが発生しました。<br><button onclick='location.reload()'>再試行</button>";
+        msg.className = "status-error";
+    });
+}
