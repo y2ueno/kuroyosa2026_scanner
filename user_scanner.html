@@ -10,9 +10,8 @@
         h1 { font-size: 1.2rem; margin-bottom: 20px; color: #e67e22; }
         #wrapper { position: relative; width: 100%; max-width: 360px; margin: 0 auto; aspect-ratio: 1 / 1; overflow: hidden; border-radius: 20px; background: #000; border: 4px solid #fff; box-shadow: 0 8px 20px rgba(0,0,0,0.15); }
         #canvas { width: 100%; height: 100%; object-fit: cover; }
-        #msg { margin-top: 25px; padding: 15px; border-radius: 12px; font-size: 16px; font-weight: bold; background: #fff; box-shadow: 0 2px 8px rgba(0,0,0,0.05); min-height: 50px; display: flex; align-items: center; justify-content: center; }
+        #msg { margin-top: 25px; padding: 15px; border-radius: 12px; font-size: 16px; font-weight: bold; background: #fff; box-shadow: 0 2px 8px rgba(0,0,0,0.05); min-height: 60px; display: flex; align-items: center; justify-content: center; }
         
-        /* 状態別スタイル */
         .status-wait { color: #5f6368; }
         .status-sending { color: #e67e22; animation: blink 1s infinite; }
         .status-success { color: #188038; background: #e6f4ea !important; border: 2px solid #34a853; }
@@ -39,16 +38,15 @@
         const ctx = canvas.getContext("2d");
         const msg = document.getElementById("msg");
 
-        // --- 設定項目 ---
+        // ※あなたのGASウェブアプリURLに書き換えてください
         const GAS_URL = "https://script.google.com/macros/s/AKfycbx0fAcXHpHTFkGkBflIKY7m6DOqFhkJjX2oZc5zzwsECZ7NM8EuTo3cwSiq5OcRRSK6Vg/exec";
 
         const urlParams = new URLSearchParams(window.location.search);
         const myUserId = urlParams.get('uid');
-
         let isScanning = true;
 
         if (!myUserId) {
-            msg.innerHTML = "【エラー】ユーザー情報が不足しています。<br>アプリから開き直してください。";
+            msg.innerHTML = "【エラー】ユーザーIDがありません。<br>アプリから開き直してください。";
             msg.className = "status-error";
             isScanning = false;
         }
@@ -62,10 +60,6 @@
                     video.play();
                     msg.innerText = "QRコードを枠内に収めてください";
                     requestAnimationFrame(tick);
-                })
-                .catch(err => {
-                    msg.innerHTML = "【エラー】カメラを起動できません。<br>設定でカメラを許可してください。";
-                    msg.className = "status-error";
                 });
         }
 
@@ -76,7 +70,6 @@
                 ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
                 const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
                 const code = jsQR(imageData.data, imageData.width, imageData.height);
-
                 if (code) {
                     isScanning = false;
                     sendData(code.data);
@@ -85,37 +78,28 @@
             if (isScanning) requestAnimationFrame(tick);
         }
 
-        /**
-         * GASにデータを送信し、返事（成功/重複）を読み取る
-         */
         function sendData(spotId) {
-            msg.innerText = "スタンプをチェック中...";
+            msg.innerText = "チェック中...";
             msg.className = "status-sending";
 
-            // GAS側の doGet で受け取れるようにパラメータを付与
+            // GASへGETで送信
             const requestUrl = `${GAS_URL}?uid=${encodeURIComponent(myUserId)}&sid=${encodeURIComponent(spotId)}`;
 
             fetch(requestUrl)
-            .then(response => {
-                if (!response.ok) throw new Error("Network response was not ok");
-                return response.json();
-            })
+            .then(res => res.json())
             .then(data => {
                 if (data.status === "success") {
-                    // 新規取得成功
                     msg.innerHTML = "スタンプを取得しました！<br><span style='font-size:12px'>右上の「完了」で戻ってください</span>";
                     msg.className = "status-success";
                     if (navigator.vibrate) navigator.vibrate(200);
                 } else if (data.status === "already") {
-                    // すでに取得済み
                     msg.innerHTML = "このスタンプは取得済みです。<br><span style='font-size:12px'>他のスポットを探しましょう！</span>";
                     msg.className = "status-already";
                     if (navigator.vibrate) navigator.vibrate([100, 50, 100]);
                 }
             })
             .catch(err => {
-                console.error("Fetch Error:", err);
-                msg.innerHTML = "通信エラーが発生しました。<br><button onclick='location.reload()'>再試行</button>";
+                msg.innerHTML = "エラーが発生しました。<br><button onclick='location.reload()'>再読み込み</button>";
                 msg.className = "status-error";
             });
         }
