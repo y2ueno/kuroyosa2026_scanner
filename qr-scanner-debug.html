@@ -1,0 +1,454 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>よさこいスタンプラリー QRスキャナー</title>
+<script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js"></script>
+<style>
+  :root {
+    --color-bg: #f7f6f2;
+    --color-surface: #f9f8f5;
+    --color-text: #28251d;
+    --color-text-muted: #7a7974;
+    --color-primary: #01696f;
+    --color-primary-hover: #0c4e54;
+    --color-success: #437a22;
+    --color-error: #a12c7b;
+    --color-warning: #964219;
+    --color-border: #d4d1ca;
+    --color-surface-offset: #f3f0ec;
+    --radius-md: 0.5rem;
+    --radius-lg: 0.75rem;
+    --space-2: 0.5rem;
+    --space-3: 0.75rem;
+    --space-4: 1rem;
+    --space-6: 1.5rem;
+    --shadow-md: 0 4px 12px oklch(0.2 0.01 80 / 0.08);
+    --font-body: 'M PLUS 1p', 'Hiragino Kaku Gothic ProN', sans-serif;
+  }
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: var(--font-body);
+    background: var(--color-bg);
+    color: var(--color-text);
+    min-height: 100dvh;
+    padding: var(--space-4);
+    font-size: 15px;
+  }
+  h1 {
+    font-size: 1.1rem;
+    font-weight: 700;
+    text-align: center;
+    margin-bottom: var(--space-4);
+    color: var(--color-primary);
+  }
+
+  /* カメラ映像 */
+  .camera-wrap {
+    position: relative;
+    background: #000;
+    border-radius: var(--radius-lg);
+    overflow: hidden;
+    max-width: 400px;
+    margin: 0 auto var(--space-4);
+    aspect-ratio: 1/1;
+  }
+  video { width: 100%; height: 100%; object-fit: cover; display: block; }
+  canvas#canvas { display: none; }
+
+  /* スキャン枠 */
+  .scan-overlay {
+    position: absolute; inset: 0;
+    display: flex; align-items: center; justify-content: center;
+    pointer-events: none;
+  }
+  .scan-frame {
+    width: 65%; height: 65%;
+    border: 3px solid rgba(1,105,111,0.8);
+    border-radius: var(--radius-md);
+    box-shadow: 0 0 0 9999px rgba(0,0,0,0.35);
+    position: relative;
+  }
+  .scan-frame::before, .scan-frame::after {
+    content: '';
+    position: absolute;
+    width: 20px; height: 20px;
+    border-color: #01696f;
+    border-style: solid;
+    top: -3px; left: -3px;
+    border-width: 4px 0 0 4px;
+  }
+  .scan-frame::after {
+    top: auto; left: auto;
+    bottom: -3px; right: -3px;
+    border-width: 0 4px 4px 0;
+  }
+
+  /* ステータス表示 */
+  .status-box {
+    max-width: 400px;
+    margin: 0 auto var(--space-3);
+    padding: var(--space-3) var(--space-4);
+    border-radius: var(--radius-md);
+    font-weight: 600;
+    text-align: center;
+    font-size: 1rem;
+    transition: all 300ms;
+  }
+  .status-waiting  { background: var(--color-surface-offset); color: var(--color-text-muted); border: 1px solid var(--color-border); }
+  .status-scanning { background: #cee4e6; color: var(--color-primary); border: 1px solid #a0c9cc; }
+  .status-ok       { background: #d4dfcc; color: var(--color-success); border: 1px solid #b0c9a2; }
+  .status-already  { background: #fdebd6; color: var(--color-warning); border: 1px solid #f0c898; }
+  .status-error    { background: #f0dce9; color: var(--color-error);   border: 1px solid #d9a8cb; }
+
+  /* ═══ デバッグパネル ═══ */
+  .debug-panel {
+    max-width: 400px;
+    margin: 0 auto var(--space-4);
+    background: #1a1a2e;
+    color: #e2e8f0;
+    border-radius: var(--radius-lg);
+    overflow: hidden;
+    box-shadow: var(--shadow-md);
+  }
+  .debug-header {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: var(--space-2) var(--space-4);
+    background: #16213e;
+    font-size: 0.78rem;
+    font-weight: 700;
+    letter-spacing: 0.05em;
+    color: #94a3b8;
+    cursor: pointer;
+  }
+  .debug-header span { color: #f59e0b; }
+  .debug-body { padding: var(--space-3) var(--space-4); display: flex; flex-direction: column; gap: var(--space-2); }
+  .debug-row {
+    display: grid;
+    grid-template-columns: 5.5rem 1fr;
+    gap: var(--space-2);
+    font-size: 0.75rem;
+    align-items: start;
+  }
+  .debug-label { color: #64748b; font-weight: 600; padding-top: 2px; }
+  .debug-value {
+    color: #e2e8f0;
+    word-break: break-all;
+    font-family: 'Menlo', 'Consolas', monospace;
+    background: rgba(255,255,255,0.05);
+    padding: 2px 6px;
+    border-radius: 4px;
+  }
+  .debug-value.ok     { color: #4ade80; }
+  .debug-value.warn   { color: #fb923c; }
+  .debug-value.err    { color: #f87171; }
+  .debug-value.info   { color: #60a5fa; }
+
+  /* ログ欄 */
+  .debug-log-wrap { border-top: 1px solid rgba(255,255,255,0.08); margin-top: var(--space-2); padding-top: var(--space-2); }
+  .debug-log-label { font-size: 0.7rem; color: #64748b; font-weight: 600; margin-bottom: 4px; letter-spacing: 0.05em; }
+  #debug-log {
+    font-family: 'Menlo', 'Consolas', monospace;
+    font-size: 0.7rem;
+    color: #94a3b8;
+    max-height: 120px;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column-reverse;
+    gap: 2px;
+  }
+  .log-entry { line-height: 1.4; }
+  .log-entry.success { color: #4ade80; }
+  .log-entry.error   { color: #f87171; }
+  .log-entry.warn    { color: #fb923c; }
+  .log-entry.info    { color: #60a5fa; }
+
+  /* 手動テストボタン */
+  .test-btns {
+    max-width: 400px;
+    margin: 0 auto var(--space-4);
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: var(--space-2);
+  }
+  .btn {
+    padding: var(--space-2) var(--space-3);
+    border-radius: var(--radius-md);
+    font-size: 0.8rem;
+    font-weight: 600;
+    cursor: pointer;
+    border: none;
+    transition: background 180ms;
+  }
+  .btn-primary { background: var(--color-primary); color: #fff; }
+  .btn-primary:hover { background: var(--color-primary-hover); }
+  .btn-outline { background: transparent; color: var(--color-primary); border: 1.5px solid var(--color-primary); }
+  .btn-outline:hover { background: #cee4e6; }
+  .btn-danger  { background: #f87171; color: #fff; }
+  .btn-warning { background: var(--color-warning); color: #fff; }
+</style>
+</head>
+<body>
+<h1>🎉 よさこいスタンプラリー2026</h1>
+
+<div class="camera-wrap">
+  <video id="video" autoplay playsinline muted></video>
+  <canvas id="canvas"></canvas>
+  <div class="scan-overlay"><div class="scan-frame"></div></div>
+</div>
+
+<div id="status" class="status-box status-waiting">カメラを起動中...</div>
+
+<!-- ═══════════════════════════════════
+     🔧 デバッグパネル
+     ═══════════════════════════════════ -->
+<div class="debug-panel">
+  <div class="debug-header" onclick="toggleDebug()">
+    <span>🔧 DEBUG PANEL</span>
+    <span id="debug-toggle-label">▼ 展開</span>
+  </div>
+  <div class="debug-body" id="debug-body">
+
+    <div class="debug-row">
+      <span class="debug-label">GAS URL</span>
+      <span class="debug-value" id="dbg-url">—</span>
+    </div>
+    <div class="debug-row">
+      <span class="debug-label">UID (受信)</span>
+      <span class="debug-value" id="dbg-uid">—</span>
+    </div>
+    <div class="debug-row">
+      <span class="debug-label">SID</span>
+      <span class="debug-value" id="dbg-sid">—</span>
+    </div>
+    <div class="debug-row">
+      <span class="debug-label">QR読取値</span>
+      <span class="debug-value" id="dbg-qr">—</span>
+    </div>
+    <div class="debug-row">
+      <span class="debug-label">送信URL</span>
+      <span class="debug-value" id="dbg-req">—</span>
+    </div>
+    <div class="debug-row">
+      <span class="debug-label">GAS応答</span>
+      <span class="debug-value" id="dbg-res">—</span>
+    </div>
+    <div class="debug-row">
+      <span class="debug-label">通信方式</span>
+      <span class="debug-value info">JSONP</span>
+    </div>
+    <div class="debug-row">
+      <span class="debug-label">冷却中</span>
+      <span class="debug-value" id="dbg-cool">false</span>
+    </div>
+
+    <div class="debug-log-wrap">
+      <div class="debug-log-label">📋 ログ（最新が上）</div>
+      <div id="debug-log"></div>
+    </div>
+  </div>
+</div>
+
+<!-- 手動テストボタン -->
+<div class="test-btns">
+  <button class="btn btn-primary" onclick="testGasDirectly()">⚡ GAS直接テスト</button>
+  <button class="btn btn-outline" onclick="testWithFakeQr()">📦 ダミーQRテスト</button>
+  <button class="btn btn-warning" onclick="testUidEmpty()">⚠️ UID空テスト</button>
+  <button class="btn btn-danger"  onclick="clearLog()">🗑 ログ消去</button>
+</div>
+
+<script>
+// ╔══════════════════════════════════════╗
+// ║  ① ここを必ず確認・書き換えてください  ║
+// ╚══════════════════════════════════════╝
+
+// 個人Gmailアカウントでデプロイした最新のGAS WebアプリURL
+const GAS_URL = "https://script.google.com/macros/s/【ここに個人GASのURLを貼る】/exec";
+
+// スタンプID（このページが対応するスポット番号）
+const STAMP_ID = "spot_001";
+
+// GlideからURLパラメータ ?uid=XXXX で渡されるUID
+// （Glideの Web Embed URLが uid={UID} になっているか必ず確認）
+const params  = new URLSearchParams(window.location.search);
+const UID     = params.get("uid") || "";
+
+// ╔══════════════════════════════════════╗
+// ║  デバッグ初期表示                     ║
+// ╚══════════════════════════════════════╝
+let debugOpen = true;
+function toggleDebug() {
+  debugOpen = !debugOpen;
+  document.getElementById("debug-body").style.display = debugOpen ? "" : "none";
+  document.getElementById("debug-toggle-label").textContent = debugOpen ? "▲ 閉じる" : "▼ 展開";
+}
+
+function addLog(msg, type = "info") {
+  const el = document.createElement("div");
+  el.className = "log-entry " + type;
+  const t = new Date().toLocaleTimeString("ja-JP");
+  el.textContent = `[${t}] ${msg}`;
+  document.getElementById("debug-log").prepend(el);
+}
+
+function updateDbg(id, val, cls = "") {
+  const el = document.getElementById(id);
+  el.textContent = val;
+  el.className = "debug-value " + cls;
+}
+
+// 初期チェック
+(function init() {
+  updateDbg("dbg-uid", UID || "⚠️ 空（URLにuidパラメータなし）", UID ? "ok" : "err");
+  updateDbg("dbg-sid", STAMP_ID, "info");
+  const isPlaceholder = GAS_URL.includes("【");
+  updateDbg("dbg-url",
+    isPlaceholder ? "⚠️ 未設定（プレースホルダーのまま）" : GAS_URL.substring(0, 60) + "...",
+    isPlaceholder ? "err" : "ok"
+  );
+  addLog("ページ読み込み完了", "info");
+  if (!UID)       addLog("⚠️ UID が空です。GlideのTemplate列でUID置換が設定されているか確認", "warn");
+  if (isPlaceholder) addLog("⚠️ GAS_URLが未設定です。コードを編集してください", "error");
+})();
+
+// ╔══════════════════════════════════════╗
+// ║  JSONP 通信                           ║
+// ╚══════════════════════════════════════╝
+let isCooling = false;
+
+function sendData(uid, sid) {
+  if (isCooling) { addLog("冷却中のためスキップ", "warn"); return; }
+
+  const cb = "onResult_" + Date.now();
+  const reqUrl = `${GAS_URL}?callback=${cb}&uid=${encodeURIComponent(uid)}&sid=${encodeURIComponent(sid)}`;
+
+  updateDbg("dbg-req", reqUrl.substring(0, 80) + "...", "info");
+  updateDbg("dbg-res", "送信中...", "info");
+  addLog(`📡 JSONP送信: uid=${uid}, sid=${sid}`, "info");
+
+  const script = document.createElement("script");
+  const timer   = setTimeout(() => {
+    addLog("⏱ タイムアウト（10秒）: GASから応答なし", "error");
+    updateDbg("dbg-res", "TIMEOUT（GASが応答しない）", "err");
+    setStatus("❌ 応答タイムアウト（GASのURL・権限を確認）", "error");
+    script.remove();
+    delete window[cb];
+    startCooldown(3000);
+  }, 10000);
+
+  window[cb] = function(result) {
+    clearTimeout(timer);
+    script.remove();
+    delete window[cb];
+    handleResult(result);
+    startCooldown(3000);
+  };
+
+  script.onerror = function() {
+    clearTimeout(timer);
+    script.remove();
+    delete window[cb];
+    addLog("🚫 script読み込みエラー: GAS URLが無効またはネットワーク不可", "error");
+    updateDbg("dbg-res", "script読み込み失敗", "err");
+    setStatus("❌ GASへの接続失敗", "error");
+    startCooldown(3000);
+  };
+
+  document.head.appendChild(script);
+  script.src = reqUrl;
+}
+
+function handleResult(result) {
+  updateDbg("dbg-res", result, result === "success" ? "ok" : result === "already" ? "warn" : "err");
+  addLog(`📩 GAS応答: "${result}"`, result === "success" ? "success" : result === "already" ? "warn" : "error");
+
+  if (result === "success") {
+    setStatus("✅ スタンプ取得！おめでとうございます🎉", "ok");
+  } else if (result === "already") {
+    setStatus("📌 すでにスタンプ済みです", "already");
+  } else if (result === "error_id") {
+    setStatus("⚠️ error_id: UIDまたはSIDが空", "error");
+    addLog("→ GlideのTemplate列でUID置換が正しく設定されているか確認してください", "warn");
+  } else {
+    setStatus("❌ エラー: " + result, "error");
+  }
+}
+
+function startCooldown(ms) {
+  isCooling = true;
+  updateDbg("dbg-cool", `true (${ms/1000}秒)`, "warn");
+  setTimeout(() => {
+    isCooling = false;
+    updateDbg("dbg-cool", "false", "ok");
+    addLog("冷却完了、次のスキャン可能", "info");
+  }, ms);
+}
+
+function setStatus(msg, type) {
+  const el = document.getElementById("status");
+  el.textContent = msg;
+  el.className = "status-box status-" + type;
+}
+
+// ╔══════════════════════════════════════╗
+// ║  カメラ + QRスキャン                  ║
+// ╚══════════════════════════════════════╝
+const video  = document.getElementById("video");
+const canvas = document.getElementById("canvas");
+const ctx    = canvas.getContext("2d");
+
+navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } })
+  .then(stream => {
+    video.srcObject = stream;
+    video.play();
+    setStatus("📷 QRコードをかざしてください", "scanning");
+    addLog("カメラ起動成功", "success");
+    requestAnimationFrame(scan);
+  })
+  .catch(err => {
+    addLog("カメラエラー: " + err.message, "error");
+    setStatus("📷 カメラを使用できません（" + err.message + "）", "error");
+  });
+
+function scan() {
+  if (video.readyState === video.HAVE_ENOUGH_DATA) {
+    canvas.width  = video.videoWidth;
+    canvas.height = video.videoHeight;
+    ctx.drawImage(video, 0, 0);
+    const img  = ctx.getImageData(0, 0, canvas.width, canvas.height);
+    const code = jsQR(img.data, img.width, img.height, { inversionAttempts: "dontInvert" });
+    if (code && !isCooling) {
+      const qrData = code.data;
+      updateDbg("dbg-qr", qrData, "info");
+      addLog(`QR検出: "${qrData}"`, "success");
+      setStatus("🔍 照合中...", "scanning");
+      sendData(UID, STAMP_ID);
+    }
+  }
+  requestAnimationFrame(scan);
+}
+
+// ╔══════════════════════════════════════╗
+// ║  手動テスト用ボタン                   ║
+// ╚══════════════════════════════════════╝
+function testGasDirectly() {
+  addLog("⚡ GAS直接テスト: uid=TEST_USER, sid=TEST_SPOT", "info");
+  sendData("TEST_USER", "TEST_SPOT");
+}
+function testWithFakeQr() {
+  updateDbg("dbg-qr", "FAKE_QR_DATA_123", "info");
+  addLog("📦 ダミーQRテスト: 現在のUIDで送信", "info");
+  sendData(UID || "NO_UID", STAMP_ID);
+}
+function testUidEmpty() {
+  addLog("⚠️ UID空テスト: error_idが返ればGASは正常", "warn");
+  sendData("", STAMP_ID);
+}
+function clearLog() {
+  document.getElementById("debug-log").innerHTML = "";
+  addLog("ログ消去", "info");
+}
+</script>
+</body>
+</html>
