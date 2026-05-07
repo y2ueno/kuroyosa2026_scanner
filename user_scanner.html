@@ -2,14 +2,14 @@
 <html lang="ja">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>スタンプ取得</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Scanner</title>
     <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js"></script>
     <style>
         body { text-align: center; font-family: sans-serif; background: #fff5e6; margin: 0; padding: 20px; }
-        #wrapper { position: relative; width: 100%; max-width: 360px; margin: 0 auto; aspect-ratio: 1 / 1; border-radius: 20px; overflow: hidden; background: #000; border: 4px solid #fff; }
+        #wrapper { width: 100%; max-width: 360px; margin: 0 auto; aspect-ratio: 1/1; border-radius: 20px; overflow: hidden; background: #000; border: 4px solid #fff; }
         #canvas { width: 100%; height: 100%; object-fit: cover; }
-        #msg { margin-top: 20px; padding: 15px; border-radius: 12px; font-weight: bold; background: #fff; min-height: 60px; display: flex; align-items: center; justify-content: center; }
+        #msg { margin-top: 20px; padding: 15px; border-radius: 12px; font-weight: bold; background: #fff; min-height: 60px; }
         .status-sending { color: #e67e22; }
         .status-success { color: #188038; background: #e6f4ea !important; border: 2px solid #34a853; }
         .status-already { color: #d93025; background: #fce8e6 !important; border: 2px solid #d93025; }
@@ -18,13 +18,13 @@
 </head>
 <body>
     <div id="wrapper"><video id="video" style="display:none"></video><canvas id="canvas"></canvas></div>
-    <div id="msg">QRコードをスキャンしてください</div>
-
+    <div id="msg">スキャン中...</div>
     <script>
         const video = document.getElementById("video");
         const canvas = document.getElementById("canvas");
         const ctx = canvas.getContext("2d");
         const msg = document.getElementById("msg");
+        // ↓ここにスペースが入らないよう注意！
         const GAS_URL = "https://script.google.com/macros/s/AKfycbx0fAcXHpHTFkGkBflIKY7m6DOqFhkJjX2oZc5zzwsECZ7NM8EuTo3cwSiq5OcRRSK6Vg/exec";
         const myUserId = new URLSearchParams(window.location.search).get('uid');
         let isScanning = true;
@@ -45,22 +45,20 @@
         }
 
         function sendData(spotId) {
-            msg.innerText = "チェック中...";
-            msg.className = "status-sending";
-            fetch(`${GAS_URL}?uid=${encodeURIComponent(myUserId)}&sid=${encodeURIComponent(spotId)}`)
-                .then(res => res.text())
-                .then(text => {
-                    const res = text.trim();
-                    if (res === "success") {
-                        msg.innerHTML = "スタンプを取得しました！"; msg.className = "status-success";
-                    } else if (res === "already") {
-                        msg.innerHTML = "このスタンプは取得済みです。"; msg.className = "status-already";
-                    } else { throw new Error(); }
-                })
-                .catch(() => {
-                    msg.innerText = "通信エラーが発生しました。"; msg.className = "status-error";
-                    setTimeout(() => { isScanning = true; }, 3000);
-                });
+            msg.innerText = "照合中..."; msg.className = "status-sending";
+            const url = `${GAS_URL}?uid=${encodeURIComponent(myUserId)}&sid=${encodeURIComponent(spotId)}`;
+            
+            fetch(url).then(res => res.text()).then(text => {
+                const res = text.trim();
+                if (res === "success") {
+                    msg.innerHTML = "スタンプを取得！"; msg.className = "status-success";
+                } else if (res === "already") {
+                    msg.innerHTML = "取得済みです"; msg.className = "status-already";
+                } else { throw new Error(res); }
+            }).catch(err => {
+                msg.innerText = "エラー: " + err; msg.className = "status-error";
+                setTimeout(() => { isScanning = true; }, 3000);
+            });
         }
     </script>
 </body>
