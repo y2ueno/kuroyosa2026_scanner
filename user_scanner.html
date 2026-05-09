@@ -24,11 +24,11 @@
     <div id="msg">カメラ起動中...</div>
 
     <script>
-        const GAS_URL = "https://script.google.com/macros/s/AKfycbzypLW6m2tBVGOT9MIFqphTafvAzUgu8-2arOSaYUda48Nh_sGVP6leY7a26jXqM6Ao/exec";
+        const GAS_URL = "https://script.google.com/macros/s/AKfycbzs8fZrh8iZ3WMlrA8hndM1r-JMpFgezc16dpuS7gUCBVdhyA71yqkNxmcT2noScCP2/exec";
 
         const video = document.getElementById("video");
         const canvas = document.getElementById("canvas");
-        const ctx = canvas.getContext("2d");
+        const ctx = canvas.getContext("2d", { willReadFrequently: true });
         const msg = document.getElementById("msg");
         const myUserId = new URLSearchParams(window.location.search).get("uid") || "";
         let isScanning = true;
@@ -61,52 +61,34 @@
             if (isScanning) requestAnimationFrame(tick);
         }
 
-        // JSONPでGASを直接呼び出す
         function sendData(spotId) {
             msg.innerText = "照合中...";
 
-            const callbackName = "gasCallback_" + Date.now();
-            const script = document.createElement("script");
-            let done = false;
+            const url = GAS_URL
+                + "?uid=" + encodeURIComponent(myUserId)
+                + "&sid=" + encodeURIComponent(spotId);
 
-            const timer = setTimeout(() => {
-                if (!done) {
-                    done = true;
-                    delete window[callbackName];
-                    if (script.parentNode) document.body.removeChild(script);
-                    msg.innerText = "エラー: タイムアウト";
-                    msg.className = "status-error";
-                    setTimeout(() => { isScanning = true; msg.innerText = "QRをスキャンしてください"; msg.className = ""; }, 3000);
-                }
-            }, 10000);
-
-            window[callbackName] = function(data) {
-                if (done) return;
-                done = true;
-                clearTimeout(timer);
-                delete window[callbackName];
-                if (script.parentNode) document.body.removeChild(script);
-
-                const result = data.result;
-                if (result === "success") {
+            fetch(url, { redirect: "follow" })
+            .then(res => res.json())
+            .then(data => {
+                if (data.result === "success") {
                     msg.innerHTML = "✅ スタンプを取得！";
                     msg.className = "status-success";
-                } else if (result === "already") {
+                } else if (data.result === "already") {
                     msg.innerHTML = "取得済みです";
                     msg.className = "status-already";
                     setTimeout(() => { isScanning = true; msg.innerText = "QRをスキャンしてください"; msg.className = ""; }, 3000);
                 } else {
-                    msg.innerText = "エラー: " + result;
+                    msg.innerText = "エラー: " + data.result;
                     msg.className = "status-error";
                     setTimeout(() => { isScanning = true; msg.innerText = "QRをスキャンしてください"; msg.className = ""; }, 3000);
                 }
-            };
-
-            script.src = GAS_URL
-                + "?uid=" + encodeURIComponent(myUserId)
-                + "&sid=" + encodeURIComponent(spotId)
-                + "&callback=" + callbackName;
-            document.body.appendChild(script);
+            })
+            .catch(err => {
+                msg.innerText = "通信エラー: " + err.message;
+                msg.className = "status-error";
+                setTimeout(() => { isScanning = true; msg.innerText = "QRをスキャンしてください"; msg.className = ""; }, 3000);
+            });
         }
     </script>
 </body>
