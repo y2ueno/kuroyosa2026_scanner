@@ -44,23 +44,18 @@
         async function sendData(spotId) {
             msg.innerText = "照合中...";
             try {
-                // Vercel 内のプロキシを叩く
                 const response = await fetch(`/api/stamp?uid=${encodeURIComponent(myUserId || "")}&sid=${encodeURIComponent(spotId)}`);
                 const data = await response.json();
-                handleResult(data.result);
+                if (data.result === "success") {
+                    msg.innerHTML = "スタンプを取得！"; msg.className = "status-success";
+                } else if (data.result === "already") {
+                    msg.innerHTML = "取得済みです"; msg.className = "status-already";
+                } else {
+                    msg.innerText = "エラー: " + data.result;
+                    setTimeout(() => { isScanning = true; }, 3000);
+                }
             } catch (e) {
                 msg.innerText = "通信エラー。再読み込みしてください";
-                setTimeout(() => { isScanning = true; }, 3000);
-            }
-        }
-
-        function handleResult(res) {
-            if (res === "success") {
-                msg.innerHTML = "スタンプを取得！"; msg.className = "status-success";
-            } else if (res === "already") {
-                msg.innerHTML = "取得済みです"; msg.className = "status-already";
-            } else {
-                msg.innerText = "エラー: " + res;
                 setTimeout(() => { isScanning = true; }, 3000);
             }
         }
