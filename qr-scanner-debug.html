@@ -3,86 +3,40 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>DEBUG: 組織アカウント疎通テスト (Proxy版)</title>
-<script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js"></script>
+<title>DEBUG: 組織版疎通テスト</title>
 <style>
-  :root { --bg: #1a1a2e; --text: #e2e8f0; --accent: #4ecca3; --err: #e94560; }
-  body { font-family: sans-serif; background: var(--bg); color: var(--text); padding: 20px; text-align: center; }
-  .status-box { padding: 15px; border-radius: 8px; font-weight: bold; margin-bottom: 20px; background: #16213e; border: 1px solid #333; }
-  .ok { color: var(--accent); border-color: var(--accent); }
-  .err { color: var(--err); border-color: var(--err); }
-  .debug-panel { background: #0f3460; padding: 15px; border-radius: 8px; text-align: left; font-size: 11px; }
-  #log { height: 120px; overflow-y: auto; background: #000; padding: 8px; border-radius: 4px; margin-top: 10px; display: flex; flex-direction: column-reverse; }
-  button { padding: 12px; border-radius: 4px; border: none; background: var(--accent); color: #1a1a2e; font-weight: bold; cursor: pointer; }
+  body { font-family: sans-serif; background: #1a1a2e; color: #fff; text-align: center; padding: 20px; }
+  .box { background: #16213e; padding: 20px; border-radius: 8px; border: 1px solid #4ecca3; margin-bottom: 20px; }
+  #log { text-align: left; background: #000; padding: 10px; font-size: 11px; height: 150px; overflow-y: auto; display: flex; flex-direction: column-reverse; }
+  button { background: #4ecca3; border: none; padding: 15px; border-radius: 4px; font-weight: bold; cursor: pointer; width: 100%; }
 </style>
 </head>
 <body>
-
-<h1>🔧 組織GAS × Proxy テスト</h1>
-
-<div class="status-box" id="status">準備中...</div>
-
-<div class="debug-panel">
-  <div>方式: Vercel Proxy 経由</div>
-  <div>UID: <span id="dbg-uid">-</span></div>
-  <div>宛先: <span style="color:#60a5fa">/api/stamp</span></div>
-  <div>応答: <span id="dbg-res">-</span></div>
+  <h1>🔧 最終疎通テスト</h1>
+  <div class="box" id="status">待機中...</div>
+  <div style="font-size: 12px; text-align: left; margin-bottom: 5px;">通信ログ:</div>
   <div id="log"></div>
-</div>
-
-<div style="margin-top:20px">
-  <button onclick="testDirectly()">⚡ 組織GASへテスト送信</button>
-</div>
+  <button onclick="test()">⚡ 組織GASへテスト送信</button>
 
 <script>
-const statusEl = document.getElementById("status");
-const logEl = document.getElementById("log");
-const UID = new URLSearchParams(window.location.search).get('uid') || "TEST_USER_999";
-document.getElementById("dbg-uid").textContent = UID;
+async function test() {
+  const statusEl = document.getElementById("status");
+  const logEl = document.getElementById("log");
+  const addLog = (m) => { logEl.innerHTML += `<div>[${new Date().toLocaleTimeString()}] ${m}</div>`; };
 
-function addLog(msg, type="") {
-  const div = document.createElement("div");
-  div.style.color = type === "err" ? "#f87171" : type === "ok" ? "#4ade80" : "#94a3b8";
-  div.textContent = `[${new Date().toLocaleTimeString()}] ${msg}`;
-  logEl.prepend(div);
-}
-
-/**
- * 送信処理（Vercel内のプロキシを叩く）
- */
-async function sendData(uid, sid) {
-  statusEl.textContent = "サーバー中継中...";
-  addLog(`Proxyへ送信開始...`);
-
-  const proxyUrl = `/api/stamp?uid=${encodeURIComponent(uid)}&sid=${encodeURIComponent(sid)}`;
+  statusEl.textContent = "中継サーバー通信中...";
+  addLog("Proxy送信開始: /api/stamp");
 
   try {
-    const res = await fetch(proxyUrl);
+    const res = await fetch(`/api/stamp?uid=TEST_USER_OK&sid=TEST_SPOT`);
     const data = await res.json();
-    
-    document.getElementById("dbg-res").textContent = data.result;
-    
-    if (data.result === "success") {
-      statusEl.textContent = "✅ 成功！シートに記録されました";
-      statusEl.className = "status-box ok";
-      addLog("GASからの応答: success", "ok");
-    } else {
-      statusEl.textContent = "❌ GASエラー: " + data.result;
-      statusEl.className = "status-box err";
-      addLog("GASからの応答: " + data.result, "err");
-    }
+    statusEl.textContent = "応答: " + data.result;
+    addLog("GAS応答: " + data.result);
   } catch (e) {
-    statusEl.textContent = "❌ 中継エラー";
-    statusEl.className = "status-box err";
-    addLog("Vercel Proxy通信失敗: " + e.message, "err");
+    statusEl.textContent = "通信エラー";
+    addLog("エラー: " + e.message);
   }
 }
-
-function testDirectly() {
-  sendData(UID, "TEST_SPOT");
-}
-
-statusEl.textContent = "待機中";
 </script>
 </body>
 </html>
