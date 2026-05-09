@@ -1,7 +1,7 @@
 export default async function handler(req, res) {
   const { uid, sid } = req.query;
 
-  // 個人アカウント版 GAS URL (あなたが正解とした URL)
+  // 【個人版正解 URL】
   const GAS_URL = "https://script.google.com/macros/s/AKfycbwXSFl6hzaM5vB7CMJS7BrT2GZ3e8EAmA_ufIiAciwrG5xlwmgkb1knLggYCtogxXx6LQ/exec";
 
   if (!uid || !sid) {
@@ -14,7 +14,7 @@ export default async function handler(req, res) {
     const gasRes = await fetch(targetUrl, { redirect: "follow" });
     const resultText = await gasRes.text();
 
-    // GAS から返ってきた "success" や "already" をそのままブラウザに返す
+    // GAS からの応答（success, already 等）をそのまま返す
     res.status(200).json({ result: resultText.trim() });
   } catch (e) {
     res.status(500).json({ result: "error_proxy: " + e.message });
