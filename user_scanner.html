@@ -10,8 +10,9 @@
         #wrapper { width: 100%; max-width: 360px; margin: 0 auto; aspect-ratio: 1/1; border-radius: 20px; overflow: hidden; background: #000; border: 4px solid #fff; }
         #canvas { width: 100%; height: 100%; object-fit: cover; }
         #msg { margin-top: 20px; padding: 15px; border-radius: 12px; font-weight: bold; background: #fff; min-height: 60px; border: 2px solid #ccc; }
-        .status-success { color: #188038; background: #e6f4ea !important; }
+        .status-success { color: #188038; background: #e6f4ea !important; border-color: #34a853 !important; }
         .status-already { color: #d93025; background: #fce8e6 !important; }
+        .status-error   { color: #d93025; }
     </style>
 </head>
 <body>
@@ -19,21 +20,30 @@
     <div id="msg">QRをスキャンしてください</div>
 
     <script>
+        // ★ 個人GmailアカウントでデプロイしたGAS URL
+        const GAS_URL = "https://script.google.com/macros/s/AKfycbypVr-A5DqRagZQpSAPuJnRf0u4L2syVG9RehaYJMHJrWhwVoR7PGonhfeHFOHzUK3qhw/exec";
+
         const video = document.getElementById("video");
         const canvas = document.getElementById("canvas");
         const ctx = canvas.getContext("2d");
         const msg = document.getElementById("msg");
-        const myUserId = new URLSearchParams(window.location.search).get('uid');
+        const myUserId = new URLSearchParams(window.location.search).get("uid") || "";
         let isScanning = true;
 
         navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } }).then(stream => {
-            video.srcObject = stream; video.setAttribute("playsinline", true); video.play();
+            video.srcObject = stream;
+            video.setAttribute("playsinline", true);
+            video.play();
             requestAnimationFrame(tick);
+        }).catch(() => {
+            msg.innerText = "カメラを起動できません";
+            msg.className = "status-error";
         });
 
         function tick() {
             if (video.readyState === video.HAVE_ENOUGH_DATA && isScanning) {
-                canvas.height = video.videoHeight; canvas.width = video.videoWidth;
+                canvas.height = video.videoHeight;
+                canvas.width = video.videoWidth;
                 ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
                 const code = jsQR(ctx.getImageData(0, 0, canvas.width, canvas.height).data, canvas.width, canvas.height);
                 if (code) { isScanning = false; sendData(code.data); }
@@ -41,23 +51,46 @@
             if (isScanning) requestAnimationFrame(tick);
         }
 
-        async function sendData(spotId) {
+        function sendData(spotId) {
             msg.innerText = "照合中...";
-            try {
-                const response = await fetch(`/api/stamp?uid=${encodeURIComponent(myUserId || "")}&sid=${encodeURIComponent(spotId)}`);
-                const data = await response.json();
-                if (data.result === "success") {
-                    msg.innerHTML = "スタンプを取得！"; msg.className = "status-success";
-                } else if (data.result === "already") {
-                    msg.innerHTML = "取得済みです"; msg.className = "status-already";
-                } else {
-                    msg.innerText = "エラー: " + data.result;
-                    setTimeout(() => { isScanning = true; }, 3000);
-                }
-            } catch (e) {
-                msg.innerText = "通信エラー。再試行してください";
-                setTimeout(() => { isScanning = true; }, 3000);
+
+            const cbName = "cb_" + Date.now();
+            const script = document.createElement("script");
+
+            const timer = setTimeout(() => {
+                cleanup();
+                msg.innerText = "タイムアウト。再試行してください";
+                msg.className = "status-error";
+                setTimeout(() => { isScanning = true; msg.innerText = "QRをスキャンしてください"; msg.className = ""; }, 3000);
+            }, 10000);
+
+            function cleanup() {
+                clearTimeout(timer);
+                delete window[cbName];
+                if (script.parentNode) script.parentNode.removeChild(script);
             }
+
+            window[cbName] = function(result) {
+                cleanup();
+                if (result === "success") {
+                    msg.innerHTML = "✅ スタンプを取得！";
+                    msg.className = "status-success";
+                } else if (result === "already") {
+                    msg.innerHTML = "取得済みです";
+                    msg.className = "status-already";
+                    setTimeout(() => { isScanning = true; msg.innerText = "QRをスキャンしてください"; msg.className = ""; }, 3000);
+                } else {
+                    msg.innerText = "エラー: " + result;
+                    msg.className = "status-error";
+                    setTimeout(() => { isScanning = true; msg.innerText = "QRをスキャンしてください"; msg.className = ""; }, 3000);
+                }
+            };
+
+            script.src = GAS_URL
+                + "?uid=" + encodeURIComponent(myUserId)
+                + "&sid=" + encodeURIComponent(spotId)
+                + "&callback=" + cbName;
+            document.body.appendChild(script);
         }
     </script>
 </body>
