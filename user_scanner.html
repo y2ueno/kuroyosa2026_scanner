@@ -24,7 +24,8 @@
     <div id="msg">カメラ起動中...</div>
 
     <script>
-        const GAS_URL = "https://script.google.com/macros/s/AKfycbwD-og3LQYMUTPUtWPTq8SiL_DoYHWXYH_WQ2dKVf_0-fOpGmzjkPDmT98OTvagCfxS/exec";
+        const SUPABASE_URL = "https://ucrwpjmmmxfdkmzewtcp.supabase.co";
+        const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InVjcndwam1tbXhmZGttemV3dGNwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzgzMzc1MTAsImV4cCI6MjA5MzkxMzUxMH0.nNfB1yuudSp-p0yZS15_ZuZOdTco6rRHxZmGV5vT9TA";
 
         const video = document.getElementById("video");
         const canvas = document.getElementById("canvas");
@@ -61,51 +62,60 @@
             if (isScanning) requestAnimationFrame(tick);
         }
 
-        function sendData(spotId) {
+        async function sendData(spotId) {
             msg.innerText = "照合中...";
 
-            const callbackName = "gasCallback_" + Date.now();
-            const script = document.createElement("script");
-            let done = false;
+            try {
+                // 重複チェック
+                const checkRes = await fetch(
+                    `${SUPABASE_URL}/rest/v1/stamps?user_id=eq.${encodeURIComponent(myUserId)}&spot_id=eq.${encodeURIComponent(spotId)}`,
+                    {
+                        headers: {
+                            "apikey": SUPABASE_KEY,
+                            "Authorization": "Bearer " + SUPABASE_KEY
+                        }
+                    }
+                );
+                const existing = await checkRes.json();
 
-            const timer = setTimeout(() => {
-                if (!done) {
-                    done = true;
-                    delete window[callbackName];
-                    if (script.parentNode) document.body.removeChild(script);
-                    msg.innerText = "エラー: タイムアウト";
-                    msg.className = "status-error";
-                    setTimeout(() => { isScanning = true; msg.innerText = "QRをスキャンしてください"; msg.className = ""; }, 3000);
-                }
-            }, 10000);
-
-            window[callbackName] = function(data) {
-                if (done) return;
-                done = true;
-                clearTimeout(timer);
-                delete window[callbackName];
-                if (script.parentNode) document.body.removeChild(script);
-
-                const result = data.result;
-                if (result === "success") {
-                    msg.innerHTML = "✅ スタンプを取得！";
-                    msg.className = "status-success";
-                } else if (result === "already") {
+                if (existing.length > 0) {
                     msg.innerHTML = "取得済みです";
                     msg.className = "status-already";
                     setTimeout(() => { isScanning = true; msg.innerText = "QRをスキャンしてください"; msg.className = ""; }, 3000);
+                    return;
+                }
+
+                // 新規登録
+                const ts = new Date().toLocaleString("ja-JP");
+                const insertRes = await fetch(
+                    `${SUPABASE_URL}/rest/v1/stamps`,
+                    {
+                        method: "POST",
+                        headers: {
+                            "apikey": SUPABASE_KEY,
+                            "Authorization": "Bearer " + SUPABASE_KEY,
+                            "Content-Type": "application/json",
+                            "Prefer": "return=minimal"
+                        },
+                        body: JSON.stringify({ user_id: myUserId, spot_id: spotId, timestamp: ts })
+                    }
+                );
+
+                if (insertRes.ok) {
+                    msg.innerHTML = "✅ スタンプを取得！";
+                    msg.className = "status-success";
                 } else {
-                    msg.innerText = "エラー: " + result;
+                    const err = await insertRes.text();
+                    msg.innerText = "エラー: " + err;
                     msg.className = "status-error";
                     setTimeout(() => { isScanning = true; msg.innerText = "QRをスキャンしてください"; msg.className = ""; }, 3000);
                 }
-            };
 
-            script.src = GAS_URL
-                + "?uid=" + encodeURIComponent(myUserId)
-                + "&sid=" + encodeURIComponent(spotId)
-                + "&callback=" + callbackName;
-            document.body.appendChild(script);
+            } catch (e) {
+                msg.innerText = "通信エラー: " + e.message;
+                msg.className = "status-error";
+                setTimeout(() => { isScanning = true; msg.innerText = "QRをスキャンしてください"; msg.className = ""; }, 3000);
+            }
         }
     </script>
 </body>
