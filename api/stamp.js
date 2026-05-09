@@ -23,7 +23,8 @@ function fetchWithRedirect(url, maxRedirects = 5) {
 
 module.exports = async function handler(req, res) {
   const { uid, sid } = req.query;
-  const GAS_URL = "https://script.google.com/macros/s/AKfycbypVr-A5DqRagZQpSAPuJnRf0u4L2syVG9RehaYJMHJrWhwVoR7PGonhfeHFOHzUK3qhw/exec";
+  // ★ URL更新
+  const GAS_URL = "https://script.google.com/macros/s/AKfycbx91GCilncyaaaHV0ehga2csz2c8z8auvzUl4lRjddV3sQOKrdu8OWLqiv_0V2eWujs_g/exec";
 
   if (!uid || !sid) return res.status(400).json({ result: "error_id" });
 
@@ -34,7 +35,9 @@ module.exports = async function handler(req, res) {
     if (response.status !== 200) {
       return res.status(200).json({ result: `GAS_ERR_${response.status}` });
     }
-    res.status(200).json({ result: response.body.trim() });
+    // ★ JSONをパースして返す
+    const parsed = JSON.parse(response.body.trim());
+    res.status(200).json(parsed);
   } catch (e) {
     res.status(200).json({ result: "error_proxy: " + e.message });
   }
