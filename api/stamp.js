@@ -1,4 +1,4 @@
-export default async function handler(req, res) {
+module.exports = async function handler(req, res) {
   const { uid, sid } = req.query;
 
   const GAS_URL = "https://script.google.com/macros/s/AKfycbz6rLi2J715UwMiSXxSWXTEDD9iocrFuWMxrLJI9pr_7MtBAXzOxTLZ-FiLkowXE93Swg/exec";
@@ -27,4 +27,4 @@ export default async function handler(req, res) {
   } catch (e) {
     res.status(500).json({ result: "error_proxy: " + e.message });
   }
-}
+};
