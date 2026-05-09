@@ -36,7 +36,7 @@ function fetchWithRedirect(url, maxRedirects = 5) {
 
 module.exports = async function handler(req, res) {
   const { uid, sid } = req.query;
-  const GAS_URL = "https://script.google.com/macros/s/AKfycbx91GCilncyaaaHV0ehga2csz2c8z8auvzUl4lRjddV3sQOKrdu8OWLqiv_0V2eWujs_g/exec";
+  const GAS_URL = "https://script.google.com/macros/s/AKfycbxRU1NhIXnwa00_602qo7tEZPLvMTe6YskIPJb8oEmKzYi0_DLT9-QAVXt1oAEkEWZ_oQ/exec";
 
   if (!uid || !sid) return res.status(200).json({ result: "error_id" });
 
