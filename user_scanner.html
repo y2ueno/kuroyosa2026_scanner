@@ -44,7 +44,6 @@
         async function sendData(spotId) {
             msg.innerText = "照合中...";
             try {
-                // Vercel 内のプロキシを叩く
                 const response = await fetch(`/api/stamp?uid=${encodeURIComponent(myUserId || "")}&sid=${encodeURIComponent(spotId)}`);
                 const data = await response.json();
                 if (data.result === "success") {
@@ -56,7 +55,7 @@
                     setTimeout(() => { isScanning = true; }, 3000);
                 }
             } catch (e) {
-                msg.innerText = "通信エラー。再読み込みしてください";
+                msg.innerText = "通信エラー。再試行してください";
                 setTimeout(() => { isScanning = true; }, 3000);
             }
         }
