@@ -11,9 +11,9 @@
         #canvas { width: 100%; height: 100%; object-fit: cover; }
         #msg { margin-top: 20px; padding: 15px; border-radius: 12px; font-weight: bold; background: #fff; min-height: 60px; }
         .status-sending { color: #e67e22; }
-        .status-success { color: #188038; background: #e6f4ea !important; }
-        .status-already { color: #d93025; background: #fce8e6 !important; }
-        .status-error { color: #d93025; background: #fce8e6 !important; font-size: 12px; }
+        .status-success { color: #188038; background: #e6f4ea !important; border: 2px solid #34a853; }
+        .status-already { color: #d93025; background: #fce8e6 !important; border: 2px solid #d93025; }
+        .status-error { color: #d93025; background: #fce8e6 !important; font-size: 12px; border: 1px solid #d93025; }
     </style>
 </head>
 <body>
@@ -25,53 +25,68 @@
         const canvas = document.getElementById("canvas");
         const ctx = canvas.getContext("2d");
         const msg = document.getElementById("msg");
-        const GAS_URL = "https://script.google.com/macros/s/AKfycbwXSFl6hzaM5vB7CMJS7BrT2GZ3e8EAmA_ufIiAciwrG5xlwmgkb1knLggYCtogxXx6LQ/exec";
+        
+        // Glideから渡されるユーザーIDを取得
         const myUserId = new URLSearchParams(window.location.search).get('uid');
         let isScanning = true;
 
+        // カメラ起動
         navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } }).then(stream => {
             video.srcObject = stream; video.setAttribute("playsinline", true); video.play();
             requestAnimationFrame(tick);
         });
 
+        // 毎フレームのスキャン処理
         function tick() {
             if (video.readyState === video.HAVE_ENOUGH_DATA && isScanning) {
                 canvas.height = video.videoHeight; canvas.width = video.videoWidth;
                 ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
                 const code = jsQR(ctx.getImageData(0, 0, canvas.width, canvas.height).data, canvas.width, canvas.height);
-                if (code) { isScanning = false; sendData(code.data); }
+                if (code) { 
+                    isScanning = false; 
+                    sendData(code.data); 
+                }
             }
             if (isScanning) requestAnimationFrame(tick);
         }
 
-        function sendData(spotId) {
+        /**
+         * データの送信（Vercelプロキシ経由）
+         * サーバーサイドでGASを叩くため、CORSエラーやリダイレクト問題を回避できます。
+         */
+        async function sendData(spotId) {
             msg.innerText = "サーバー照合中..."; msg.className = "status-sending";
             
-            const script = document.createElement("script");
-            const callbackName = "onResult_" + Date.now();
+            // Vercel内のAPIエンドポイントを叩く
+            const proxyUrl = `/api/stamp?uid=${encodeURIComponent(myUserId || "")}&sid=${encodeURIComponent(spotId)}`;
             
-            // 5秒経っても返事がない場合はエラーにする
-            const timeout = setTimeout(() => {
-                msg.innerText = "応答なし。uid=" + myUserId + " が届いていない可能性があります。";
+            try {
+                const response = await fetch(proxyUrl);
+                const data = await response.json();
+                
+                handleResult(data.result);
+            } catch (e) {
+                console.error("Proxy通信エラー:", e);
+                msg.innerText = "エラー: サーバーとの接続に失敗しました";
                 msg.className = "status-error";
-                isScanning = true;
-            }, 7000);
+                // 3秒後に再スキャンを可能にする
+                setTimeout(() => { isScanning = true; }, 3000);
+            }
+        }
 
-            window[callbackName] = function(res) {
-                clearTimeout(timeout);
-                if (res === "success") {
-                    msg.innerHTML = "スタンプを取得！"; msg.className = "status-success";
-                } else if (res === "already") {
-                    msg.innerHTML = "取得済みです"; msg.className = "status-already";
-                } else {
-                    msg.innerText = "エラー: " + res; msg.className = "status-error";
-                }
-                delete window[callbackName];
-                script.remove();
-            };
-
-            script.src = GAS_URL + "?uid=" + encodeURIComponent(myUserId) + "&sid=" + encodeURIComponent(spotId) + "&callback=" + callbackName;
-            document.body.appendChild(script);
+        // 結果の表示処理
+        function handleResult(res) {
+            if (res === "success") {
+                msg.innerHTML = "スタンプを取得！"; msg.className = "status-success";
+            } else if (res === "already") {
+                msg.innerHTML = "取得済みです"; msg.className = "status-already";
+            } else if (res === "error_id") {
+                msg.innerText = "エラー: IDが正しく設定されていません"; msg.className = "status-error";
+                setTimeout(() => { isScanning = true; }, 3000);
+            } else {
+                msg.innerText = "エラー: " + res; msg.className = "status-error";
+                setTimeout(() => { isScanning = true; }, 3000);
+            }
         }
     </script>
 </body>
