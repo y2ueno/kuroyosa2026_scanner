@@ -10,8 +10,8 @@
         #wrapper { width: 100%; max-width: 360px; margin: 0 auto; aspect-ratio: 1/1; border-radius: 20px; overflow: hidden; background: #000; border: 4px solid #fff; }
         #canvas { width: 100%; height: 100%; object-fit: cover; }
         #msg { margin-top: 20px; padding: 15px; border-radius: 12px; font-weight: bold; background: #fff; min-height: 60px; border: 2px solid #ccc; }
-        .status-success { color: #188038; background: #e6f4ea !important; border-color: #34a853; }
-        .status-already { color: #d93025; background: #fce8e6 !important; border-color: #d93025; }
+        .status-success { color: #188038; background: #e6f4ea !important; }
+        .status-already { color: #d93025; background: #fce8e6 !important; }
     </style>
 </head>
 <body>
@@ -44,6 +44,7 @@
         async function sendData(spotId) {
             msg.innerText = "照合中...";
             try {
+                // Vercel 内のプロキシを叩く
                 const response = await fetch(`/api/stamp?uid=${encodeURIComponent(myUserId || "")}&sid=${encodeURIComponent(spotId)}`);
                 const data = await response.json();
                 if (data.result === "success") {
