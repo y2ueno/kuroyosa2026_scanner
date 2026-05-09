@@ -7,8 +7,9 @@
     <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js"></script>
     <style>
         body { text-align: center; font-family: sans-serif; background: #fff5e6; margin: 0; padding: 20px; }
-        #wrapper { width: 100%; max-width: 360px; margin: 0 auto; aspect-ratio: 1/1; border-radius: 20px; overflow: hidden; background: #000; border: 4px solid #fff; }
-        #canvas { width: 100%; height: 100%; object-fit: cover; }
+        #wrapper { position: relative; width: 100%; max-width: 360px; margin: 0 auto; aspect-ratio: 1/1; border-radius: 20px; overflow: hidden; background: #000; border: 4px solid #fff; }
+        #video { position: absolute; top: 0; left: 0; width: 100%; height: 100%; object-fit: cover; }
+        #canvas { position: absolute; top: 0; left: 0; width: 100%; height: 100%; opacity: 0; }
         #msg { margin-top: 20px; padding: 15px; border-radius: 12px; font-weight: bold; background: #fff; min-height: 60px; border: 2px solid #ccc; }
         .status-success { color: #188038; background: #e6f4ea !important; border-color: #34a853 !important; }
         .status-already { color: #d93025; background: #fce8e6 !important; }
@@ -16,12 +17,14 @@
     </style>
 </head>
 <body>
-    <div id="wrapper"><video id="video" style="display:none"></video><canvas id="canvas"></canvas></div>
-    <div id="msg">QRをスキャンしてください</div>
+    <div id="wrapper">
+        <video id="video" autoplay playsinline muted></video>
+        <canvas id="canvas"></canvas>
+    </div>
+    <div id="msg">カメラ起動中...</div>
 
     <script>
-        // ★ 個人GmailアカウントでデプロイしたGAS URL
-        const GAS_URL = "const GAS_URL = "https://script.google.com/macros/s/AKfycbx91GCilncyaaaHV0ehga2csz2c8z8auvzUl4lRjddV3sQOKrdu8OWLqiv_0V2eWujs_g/exec";";
+        const GAS_URL = "https://script.google.com/macros/s/AKfycbx91GCilncyaaaHV0ehga2csz2c8z8auvzUl4lRjddV3sQOKrdu8OWLqiv_0V2eWujs_g/exec";
 
         const video = document.getElementById("video");
         const canvas = document.getElementById("canvas");
@@ -30,30 +33,37 @@
         const myUserId = new URLSearchParams(window.location.search).get("uid") || "";
         let isScanning = true;
 
-        navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } }).then(stream => {
+        navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } })
+        .then(stream => {
             video.srcObject = stream;
-            video.setAttribute("playsinline", true);
-            video.play();
-            requestAnimationFrame(tick);
-        }).catch(() => {
-            msg.innerText = "カメラを起動できません";
+            video.onloadedmetadata = () => {
+                video.play();
+                msg.innerText = "QRをスキャンしてください";
+                requestAnimationFrame(tick);
+            };
+        })
+        .catch(err => {
+            msg.innerText = "カメラエラー: " + err.message;
             msg.className = "status-error";
         });
 
         function tick() {
-            if (video.readyState === video.HAVE_ENOUGH_DATA && isScanning) {
-                canvas.height = video.videoHeight;
+            if (video.readyState >= 2 && isScanning) {
                 canvas.width = video.videoWidth;
-                ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-                const code = jsQR(ctx.getImageData(0, 0, canvas.width, canvas.height).data, canvas.width, canvas.height);
-                if (code) { isScanning = false; sendData(code.data); }
+                canvas.height = video.videoHeight;
+                ctx.drawImage(video, 0, 0);
+                const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+                const code = jsQR(imageData.data, canvas.width, canvas.height);
+                if (code) {
+                    isScanning = false;
+                    sendData(code.data);
+                }
             }
             if (isScanning) requestAnimationFrame(tick);
         }
 
         function sendData(spotId) {
             msg.innerText = "照合中...";
-
             const cbName = "cb_" + Date.now();
             const script = document.createElement("script");
 
