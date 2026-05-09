@@ -24,7 +24,7 @@
     <div id="msg">カメラ起動中...</div>
 
     <script>
-        const GAS_URL = "/api/stamp";
+        const GAS_URL = "https://script.google.com/macros/s/AKfycbxRU1NhIXnwa00_602qo7tEZPLvMTe6YskIPJb8oEmKzYi0_DLT9-QAVXt1oAEkEWZ_oQ/exec";
 
         const video = document.getElementById("video");
         const canvas = document.getElementById("canvas");
@@ -61,17 +61,32 @@
             if (isScanning) requestAnimationFrame(tick);
         }
 
-        // ★★★ fetch方式に変更 ★★★
+        // JSONPでGASを直接呼び出す
         function sendData(spotId) {
             msg.innerText = "照合中...";
 
-            const url = GAS_URL
-                + "?uid=" + encodeURIComponent(myUserId)
-                + "&sid=" + encodeURIComponent(spotId);
+            const callbackName = "gasCallback_" + Date.now();
+            const script = document.createElement("script");
+            let done = false;
 
-            fetch(url)
-            .then(res => res.json())
-            .then(data => {
+            const timer = setTimeout(() => {
+                if (!done) {
+                    done = true;
+                    delete window[callbackName];
+                    if (script.parentNode) document.body.removeChild(script);
+                    msg.innerText = "エラー: タイムアウト";
+                    msg.className = "status-error";
+                    setTimeout(() => { isScanning = true; msg.innerText = "QRをスキャンしてください"; msg.className = ""; }, 3000);
+                }
+            }, 10000);
+
+            window[callbackName] = function(data) {
+                if (done) return;
+                done = true;
+                clearTimeout(timer);
+                delete window[callbackName];
+                if (script.parentNode) document.body.removeChild(script);
+
                 const result = data.result;
                 if (result === "success") {
                     msg.innerHTML = "✅ スタンプを取得！";
@@ -85,12 +100,13 @@
                     msg.className = "status-error";
                     setTimeout(() => { isScanning = true; msg.innerText = "QRをスキャンしてください"; msg.className = ""; }, 3000);
                 }
-            })
-            .catch(err => {
-                msg.innerText = "通信エラー: " + err.message;
-                msg.className = "status-error";
-                setTimeout(() => { isScanning = true; msg.innerText = "QRをスキャンしてください"; msg.className = ""; }, 3000);
-            });
+            };
+
+            script.src = GAS_URL
+                + "?uid=" + encodeURIComponent(myUserId)
+                + "&sid=" + encodeURIComponent(spotId)
+                + "&callback=" + callbackName;
+            document.body.appendChild(script);
         }
     </script>
 </body>
