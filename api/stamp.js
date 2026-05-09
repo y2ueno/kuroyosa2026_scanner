@@ -7,11 +7,24 @@ function fetchWithRedirect(url, maxRedirects = 5) {
     protocol.get(url, {
       headers: {
         "User-Agent": "Mozilla/5.0",
-        "Accept": "text/plain,*/*"
+        "Accept": "application/json, text/plain, */*"
       }
     }, (res) => {
-      if ((res.statusCode === 301 || res.statusCode === 302 || res.statusCode === 307) && res.headers.location && maxRedirects > 0) {
-        resolve(fetchWithRedirect(res.headers.location, maxRedirects - 1));
+      // リダイレクト処理：クエリパラメータをそのまま維持
+      if ([301, 302, 303, 307, 308].includes(res.statusCode) && res.headers.location && maxRedirects > 0) {
+        let nextUrl = res.headers.location;
+        // 相対URLの場合は絶対URLに変換
+        if (nextUrl.startsWith("/")) {
+          const parsed = new URL(url);
+          nextUrl = parsed.origin + nextUrl;
+        }
+        // リダイレクト先にクエリパラメータがない場合は元のを引き継ぐ
+        const origUrl = new URL(url);
+        const nextParsed = new URL(nextUrl);
+        if (!nextParsed.search && origUrl.search) {
+          nextUrl = nextUrl + origUrl.search;
+        }
+        resolve(fetchWithRedirect(nextUrl, maxRedirects - 1));
         return;
       }
       let data = "";
@@ -23,19 +36,17 @@ function fetchWithRedirect(url, maxRedirects = 5) {
 
 module.exports = async function handler(req, res) {
   const { uid, sid } = req.query;
-  // ★ URL更新
   const GAS_URL = "https://script.google.com/macros/s/AKfycbx91GCilncyaaaHV0ehga2csz2c8z8auvzUl4lRjddV3sQOKrdu8OWLqiv_0V2eWujs_g/exec";
 
-  if (!uid || !sid) return res.status(400).json({ result: "error_id" });
+  if (!uid || !sid) return res.status(200).json({ result: "error_id" });
 
   const targetUrl = `${GAS_URL}?uid=${encodeURIComponent(uid)}&sid=${encodeURIComponent(sid)}`;
 
   try {
     const response = await fetchWithRedirect(targetUrl);
     if (response.status !== 200) {
-      return res.status(200).json({ result: `GAS_ERR_${response.status}` });
+      return res.status(200).json({ result: `GAS_ERR_${response.status}`, body: response.body.substring(0, 200) });
     }
-    // ★ JSONをパースして返す
     const parsed = JSON.parse(response.body.trim());
     res.status(200).json(parsed);
   } catch (e) {
