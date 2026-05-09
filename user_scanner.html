@@ -33,7 +33,6 @@
         const myUserId = new URLSearchParams(window.location.search).get("uid") || "";
         let isScanning = true;
 
-        // ★変更なし：カメラ起動
         navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } })
         .then(stream => {
             video.srcObject = stream;
@@ -48,14 +47,12 @@
             msg.className = "status-error";
         });
 
-        // ★変更なし：QR読み取りループ
         function tick() {
             if (video.readyState >= 2 && isScanning) {
                 canvas.width = video.videoWidth;
                 canvas.height = video.videoHeight;
                 ctx.drawImage(video, 0, 0);
-                const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-                const code = jsQR(imageData.data, canvas.width, canvas.height);
+                const code = jsQR(ctx.getImageData(0, 0, canvas.width, canvas.height).data, canvas.width, canvas.height);
                 if (code) {
                     isScanning = false;
                     sendData(code.data);
@@ -64,27 +61,18 @@
             if (isScanning) requestAnimationFrame(tick);
         }
 
-        // ★★★ ここから全部変更：scriptタグ → iframeのpostMessage方式 ★★★
+        // ★★★ fetch方式に変更 ★★★
         function sendData(spotId) {
             msg.innerText = "照合中...";
 
-            // 古いiframeがあれば削除
-            const old = document.getElementById("gas_iframe");
-            if (old) old.remove();
+            const url = GAS_URL
+                + "?uid=" + encodeURIComponent(myUserId)
+                + "&sid=" + encodeURIComponent(spotId);
 
-            // postMessageでGASの結果を受け取るリスナー
-            const timer = setTimeout(() => {
-                window.removeEventListener("message", onMessage);
-                msg.innerText = "タイムアウト。再試行してください";
-                msg.className = "status-error";
-                setTimeout(() => { isScanning = true; msg.innerText = "QRをスキャンしてください"; msg.className = ""; }, 3000);
-            }, 10000);
-
-            function onMessage(e) {
-                if (!e.data || !e.data.gasResult) return;
-                clearTimeout(timer);
-                window.removeEventListener("message", onMessage);
-                const result = e.data.gasResult;
+            fetch(url)
+            .then(res => res.json())
+            .then(data => {
+                const result = data.result;
                 if (result === "success") {
                     msg.innerHTML = "✅ スタンプを取得！";
                     msg.className = "status-success";
@@ -97,21 +85,13 @@
                     msg.className = "status-error";
                     setTimeout(() => { isScanning = true; msg.innerText = "QRをスキャンしてください"; msg.className = ""; }, 3000);
                 }
-            }
-
-            window.addEventListener("message", onMessage);
-
-            // iframeでGASを呼び出す
-            const iframe = document.createElement("iframe");
-            iframe.id = "gas_iframe";
-            iframe.style.display = "none";
-            iframe.src = GAS_URL
-                + "?uid=" + encodeURIComponent(myUserId)
-                + "&sid=" + encodeURIComponent(spotId)
-                + "&callback=onResult";
-            document.body.appendChild(iframe);
+            })
+            .catch(err => {
+                msg.innerText = "通信エラー: " + err.message;
+                msg.className = "status-error";
+                setTimeout(() => { isScanning = true; msg.innerText = "QRをスキャンしてください"; msg.className = ""; }, 3000);
+            });
         }
-        // ★★★ 変更ここまで ★★★
     </script>
 </body>
 </html>
