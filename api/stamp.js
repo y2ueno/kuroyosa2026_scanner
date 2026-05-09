@@ -1,7 +1,7 @@
 module.exports = async function handler(req, res) {
   const { uid, sid } = req.query;
 
-  const GAS_URL = "https://script.google.com/macros/s/AKfycbxPmD5dcEeYe_9fAp6Ui-x21a5oHjoI4xuMyu484VYfyndNbZ6lStTPgo_lcpq89QFaCA/exec";
+  const GAS_URL = "https://script.google.com/macros/s/AKfycbypVr-A5DqRagZQpSAPuJnRf0u4L2syVG9RehaYJMHJrWhwVoR7PGonhfeHFOHzUK3qhw/exec";
 
   if (!uid || !sid) return res.status(400).json({ result: "error_id" });
 
