@@ -6,21 +6,22 @@
     <title>事務局専用｜景品交換スキャナー</title>
     <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js"></script>
     <style>
-        body { 
-            text-align: center; 
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; 
-            background: #f0f2f5; 
-            margin: 0; 
-            padding: 20px; 
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body {
+            text-align: center;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            background: #f0f2f5;
+            padding: 20px;
             color: #333;
+            min-height: 100dvh;
         }
         h1 { font-size: 1.2rem; margin-bottom: 20px; color: #1a73e8; }
-        
-        #wrapper { 
-            position: relative; 
-            width: 100%; 
-            max-width: 360px; 
-            margin: 0 auto; 
+
+        #wrapper {
+            position: relative;
+            width: 100%;
+            max-width: 360px;
+            margin: 0 auto;
             aspect-ratio: 1 / 1;
             overflow: hidden;
             border-radius: 20px;
@@ -30,67 +31,113 @@
         }
         #canvas { width: 100%; height: 100%; object-fit: cover; }
 
-        #msg { 
-            margin-top: 25px; 
-            padding: 15px; 
-            border-radius: 12px; 
-            font-size: 16px; 
-            font-weight: bold; 
-            line-height: 1.5;
-            background: #fff;
-            box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+        /* 枠線スキャンアニメーション */
+        #scan-line {
+            position: absolute;
+            left: 10%; width: 80%; height: 2px;
+            background: rgba(26,115,232,0.7);
+            animation: scan 2s linear infinite;
+            pointer-events: none;
+        }
+        @keyframes scan {
+            0%   { top: 10%; }
+            100% { top: 90%; }
         }
 
-        /* 状態別スタイル */
-        .status-wait { color: #5f6368; }
-        .status-error { color: #d93025; background: #fce8e6 !important; }
-        .status-sending { color: #e67e22; animation: blink 1s infinite; }
-        .status-success { color: #188038; background: #e6f4ea !important; border: 2px solid #34a853; }
+        #msg {
+            margin-top: 20px;
+            padding: 16px;
+            border-radius: 14px;
+            font-size: 16px;
+            font-weight: bold;
+            line-height: 1.6;
+            background: #fff;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+            max-width: 360px;
+            margin-left: auto;
+            margin-right: auto;
+        }
 
-        @keyframes blink { 0% { opacity: 1; } 50% { opacity: 0.5; } 100% { opacity: 1; } }
-        
-        .hint { font-size: 12px; color: #777; margin-top: 10px; font-weight: normal; }
+        .status-wait    { color: #5f6368; }
+        .status-sending { color: #e67e22; animation: blink 0.8s infinite; }
+        .status-success { color: #188038; background: #e6f4ea !important; border: 2px solid #34a853; }
+        .status-error   { color: #d93025; background: #fce8e6 !important; border: 2px solid #ea4335; }
+        .status-already { color: #7b1fa2; background: #f3e5f5 !important; border: 2px solid #ab47bc; }
+        .status-lack    { color: #e65100; background: #fff3e0 !important; border: 2px solid #fb8c00; }
+
+        @keyframes blink {
+            0%,100% { opacity: 1; }
+            50%      { opacity: 0.4; }
+        }
+
+        .prize-badge {
+            display: inline-block;
+            margin-top: 8px;
+            padding: 4px 16px;
+            border-radius: 999px;
+            font-size: 1.4rem;
+            font-weight: 900;
+            letter-spacing: 2px;
+        }
+        .prize-p1 { background: #fffde7; color: #f57f17; border: 2px solid #fdd835; }
+        .prize-p2 { background: #e8f5e9; color: #1b5e20; border: 2px solid #43a047; }
+
+        #retry-btn {
+            display: none;
+            margin: 16px auto 0;
+            padding: 12px 32px;
+            border-radius: 999px;
+            background: #1a73e8;
+            color: #fff;
+            font-size: 1rem;
+            font-weight: bold;
+            border: none;
+            cursor: pointer;
+            box-shadow: 0 2px 6px rgba(26,115,232,0.3);
+        }
+        #retry-btn:active { background: #0d47a1; }
+
+        .hint { font-size: 12px; color: #777; margin-top: 12px; }
     </style>
 </head>
 <body>
 
-    <h1>景品交換スキャナー</h1>
+    <h1>🎁 景品交換スキャナー</h1>
 
     <div id="wrapper">
-        <video id="video" style="display:none"></video>
+        <video id="video" style="display:none" playsinline></video>
         <canvas id="canvas"></canvas>
+        <div id="scan-line"></div>
     </div>
 
-    <div id="msg" class="status-wait">
-        カメラの起動を準備中...
-    </div>
+    <div id="msg" class="status-wait">カメラの起動を準備中...</div>
 
-    <p class="hint">※カメラの利用許可を求めるポップアップが出たら<br>「許可」をタップしてください</p>
+    <button id="retry-btn" onclick="resetScanner()">次の人をスキャン</button>
+
+    <p class="hint">※カメラの利用許可を求めるポップアップが出たら「許可」をタップしてください</p>
 
     <script>
-        const video = document.getElementById("video");
+        const video  = document.getElementById("video");
         const canvas = document.getElementById("canvas");
-        const ctx = canvas.getContext("2d");
-        const msg = document.getElementById("msg");
+        const ctx    = canvas.getContext("2d");
+        const msg    = document.getElementById("msg");
+        const retryBtn = document.getElementById("retry-btn");
+        const scanLine = document.getElementById("scan-line");
 
-        // 【確定済み】あなたのGASウェブアプリURL
         const GAS_URL = "https://script.google.com/macros/s/AKfycbwPTNdb1Y94X1L1-AM6bykD0gnNbHvoxqycEAs8XTSQPujLsl6ZRvUla0042zeUyG-5/exec";
 
         let isScanning = true;
 
-        // カメラ起動処理
         function startCamera() {
             navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } })
             .then(stream => {
                 video.srcObject = stream;
-                video.setAttribute("playsinline", true); // iOS Safari対策
                 video.play();
                 msg.innerText = "QRコードを枠内に収めてください";
                 msg.className = "status-wait";
                 requestAnimationFrame(tick);
             })
             .catch(err => {
-                console.error(err);
                 msg.innerHTML = "【エラー】カメラを起動できません<br>ブラウザの設定でカメラ権限を許可してください";
                 msg.className = "status-error";
             });
@@ -99,47 +146,85 @@
         function tick() {
             if (video.readyState === video.HAVE_ENOUGH_DATA && isScanning) {
                 canvas.height = video.videoHeight;
-                canvas.width = video.videoWidth;
+                canvas.width  = video.videoWidth;
                 ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-                
+
                 const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
                 const code = jsQR(imageData.data, imageData.width, imageData.height);
 
                 if (code) {
-                    isScanning = false; // 二重送信防止
+                    isScanning = false;
+                    scanLine.style.display = "none";
                     sendData(code.data);
                 }
             }
-            if (isScanning) {
-                requestAnimationFrame(tick);
-            }
+            if (isScanning) requestAnimationFrame(tick);
         }
 
         function sendData(userId) {
             msg.innerText = "判定中...";
             msg.className = "status-sending";
 
+            // no-cors を使わず通常のfetchでレスポンスを受け取る
             fetch(GAS_URL, {
                 method: "POST",
-                mode: "no-cors",
+                headers: { "Content-Type": "text/plain" },
                 body: JSON.stringify({ userId: userId })
             })
-            .then(() => {
-                // 送信成功時の表示
-                msg.innerHTML = "送信完了！<br>下の「完了」ボタンを押して戻ってください";
-                msg.className = "status-success";
-                
-                // 完了バイブレーション（Androidのみ）
-                if (navigator.vibrate) navigator.vibrate(200);
-            })
+            .then(res => res.json())
+            .then(data => handleResult(data, userId))
             .catch(err => {
-                alert("送信エラーが発生しました: " + err);
-                isScanning = true;
-                msg.innerText = "エラー：再スキャンしてください";
+                // CORS問題のフォールバック：GETで再試行
+                return fetch(`${GAS_URL}?userId=${encodeURIComponent(userId)}`)
+                    .then(res => res.json())
+                    .then(data => handleResult(data, userId))
+                    .catch(e => {
+                        msg.innerHTML = "通信エラーが発生しました<br>再度スキャンしてください";
+                        msg.className = "status-error";
+                        retryBtn.style.display = "block";
+                    });
             });
         }
 
-        // 実行開始
+        function handleResult(data, userId) {
+            if (navigator.vibrate) navigator.vibrate(200);
+
+            if (data.status === "success") {
+                const prize = data.prize === "P2" ? "景品B（4スポット達成）" : "景品A（3スポット達成）";
+                const badgeClass = data.prize === "P2" ? "prize-p2" : "prize-p1";
+                msg.innerHTML = `✅ 交換OK！<br>
+                    <span class="prize-badge ${badgeClass}">${data.prize}</span><br>
+                    ${prize}<br>
+                    <small style="font-weight:normal;color:#555;">スタンプ数：${data.count}個</small>`;
+                msg.className = "status-success";
+
+            } else if (data.status === "already_exchanged") {
+                msg.innerHTML = `⚠️ 交換済み<br>
+                    <small style="font-weight:normal;color:#555;">この方はすでに景品を受け取っています</small>`;
+                msg.className = "status-already";
+
+            } else if (data.status === "not_enough") {
+                msg.innerHTML = `❌ スタンプ不足<br>
+                    <small style="font-weight:normal;color:#555;">現在 ${data.count}個 ／ 3個以上必要</small>`;
+                msg.className = "status-lack";
+
+            } else {
+                msg.innerHTML = `❓ 不明なエラー<br><small>${JSON.stringify(data)}</small>`;
+                msg.className = "status-error";
+            }
+
+            retryBtn.style.display = "block";
+        }
+
+        function resetScanner() {
+            isScanning = true;
+            scanLine.style.display = "block";
+            retryBtn.style.display = "none";
+            msg.innerText = "QRコードを枠内に収めてください";
+            msg.className = "status-wait";
+            requestAnimationFrame(tick);
+        }
+
         startCamera();
     </script>
 </body>
