@@ -3,166 +3,86 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>DEBUG: よさこいスキャナー (Proxy版)</title>
+<title>DEBUG: 組織アカウント疎通テスト (Proxy版)</title>
 <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js"></script>
 <style>
-  :root {
-    --color-bg: #1a1a2e;
-    --color-surface: #16213e;
-    --color-text: #e2e8f0;
-    --color-primary: #4ecca3;
-    --color-error: #e94560;
-    --color-warn: #f5b461;
-    --radius: 8px;
-  }
-  body { font-family: sans-serif; background: var(--color-bg); color: var(--color-text); padding: 20px; margin: 0; text-align: center; }
-  h1 { font-size: 1.2rem; margin-bottom: 20px; color: var(--color-primary); }
-
-  .camera-wrap { position: relative; width: 100%; max-width: 300px; margin: 0 auto 20px; aspect-ratio: 1/1; background: #000; border-radius: var(--radius); overflow: hidden; border: 2px solid #333; }
-  video { width: 100%; height: 100%; object-fit: cover; }
-  
-  .status-box { padding: 15px; border-radius: var(--radius); font-weight: bold; margin-bottom: 20px; background: var(--color-surface); border: 1px solid #333; }
-  .ok { color: var(--color-primary); border-color: var(--color-primary); }
-  .err { color: var(--color-error); border-color: var(--color-error); }
-  .warn { color: var(--color-warn); border-color: var(--color-warn); }
-
-  .debug-panel { background: #0f3460; padding: 15px; border-radius: var(--radius); text-align: left; font-size: 12px; margin-bottom: 20px; }
-  .debug-row { display: flex; justify-content: space-between; margin-bottom: 5px; border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 2px; }
-  .debug-label { color: #94a3b8; }
-  
-  #log { height: 150px; overflow-y: auto; background: #000; padding: 10px; border-radius: 4px; font-family: monospace; font-size: 11px; color: #aaa; margin-top: 10px; display: flex; flex-direction: column-reverse; }
-  .log-item { margin-bottom: 2px; border-left: 2px solid #444; padding-left: 5px; }
-
-  .btns { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
-  button { padding: 12px; border: none; border-radius: 4px; font-weight: bold; cursor: pointer; background: #533483; color: white; }
-  button:active { opacity: 0.8; }
-  .btn-test { background: #4ecca3; color: #1a1a2e; }
+  :root { --bg: #1a1a2e; --text: #e2e8f0; --accent: #4ecca3; --err: #e94560; }
+  body { font-family: sans-serif; background: var(--bg); color: var(--text); padding: 20px; text-align: center; }
+  .status-box { padding: 15px; border-radius: 8px; font-weight: bold; margin-bottom: 20px; background: #16213e; border: 1px solid #333; }
+  .ok { color: var(--accent); border-color: var(--accent); }
+  .err { color: var(--err); border-color: var(--err); }
+  .debug-panel { background: #0f3460; padding: 15px; border-radius: 8px; text-align: left; font-size: 11px; }
+  #log { height: 120px; overflow-y: auto; background: #000; padding: 8px; border-radius: 4px; margin-top: 10px; display: flex; flex-direction: column-reverse; }
+  button { padding: 12px; border-radius: 4px; border: none; background: var(--accent); color: #1a1a2e; font-weight: bold; cursor: pointer; }
 </style>
 </head>
 <body>
 
-<h1>🔧 スキャナーテスト (Proxy方式)</h1>
+<h1>🔧 組織GAS × Proxy テスト</h1>
 
-<div class="camera-wrap">
-  <video id="video" autoplay playsinline></video>
-  <canvas id="canvas" style="display:none"></canvas>
-</div>
-
-<div id="status" class="status-box">カメラ準備中...</div>
+<div class="status-box" id="status">準備中...</div>
 
 <div class="debug-panel">
-  <div class="debug-row"><span class="debug-label">方式:</span><span>Vercel Proxy (fetch)</span></div>
-  <div class="debug-row"><span class="debug-label">UID:</span><span id="dbg-uid">-</span></div>
-  <div class="debug-row"><span class="debug-label">SID:</span><span>spot_001</span></div>
-  <div class="debug-row"><span class="debug-label">最後のリクエスト:</span><span id="dbg-req">-</span></div>
-  <div class="debug-row"><span class="debug-label">サーバー応答:</span><span id="dbg-res">-</span></div>
+  <div>方式: Vercel Proxy 経由</div>
+  <div>UID: <span id="dbg-uid">-</span></div>
+  <div>宛先: <span style="color:#60a5fa">/api/stamp</span></div>
+  <div>応答: <span id="dbg-res">-</span></div>
   <div id="log"></div>
 </div>
 
-<div class="btns">
-  <button class="btn-test" onclick="testDirectly()">⚡ GAS直接テスト</button>
-  <button onclick="location.reload()">🔄 再読み込み</button>
+<div style="margin-top:20px">
+  <button onclick="testDirectly()">⚡ 組織GASへテスト送信</button>
 </div>
 
 <script>
-const video = document.getElementById("video");
-const canvas = document.getElementById("canvas");
-const ctx = canvas.getContext("2d");
 const statusEl = document.getElementById("status");
 const logEl = document.getElementById("log");
-
-// URLパラメータからUIDを取得
-const UID = new URLSearchParams(window.location.search).get('uid') || "NO_UID";
+const UID = new URLSearchParams(window.location.search).get('uid') || "TEST_USER_999";
 document.getElementById("dbg-uid").textContent = UID;
 
-let isCooling = false;
-
-// ログ出力
 function addLog(msg, type="") {
   const div = document.createElement("div");
-  div.className = "log-item " + type;
+  div.style.color = type === "err" ? "#f87171" : type === "ok" ? "#4ade80" : "#94a3b8";
   div.textContent = `[${new Date().toLocaleTimeString()}] ${msg}`;
   logEl.prepend(div);
 }
 
-// カメラ起動
-navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } }).then(stream => {
-  video.srcObject = stream;
-  video.play();
-  statusEl.textContent = "QRをかざしてください";
-  requestAnimationFrame(tick);
-});
-
-function tick() {
-  if (video.readyState === video.HAVE_ENOUGH_DATA && !isCooling) {
-    canvas.height = video.videoHeight;
-    canvas.width = video.videoWidth;
-    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-    const code = jsQR(ctx.getImageData(0, 0, canvas.width, canvas.height).data, canvas.width, canvas.height);
-    if (code) {
-      sendData(UID, code.data);
-    }
-  }
-  requestAnimationFrame(tick);
-}
-
 /**
- * 送信処理（Vercelプロキシ経由）
+ * 送信処理（Vercel内のプロキシを叩く）
  */
 async function sendData(uid, sid) {
-  if (isCooling) return;
-  isCooling = true;
-  
-  statusEl.textContent = "サーバー照合中...";
-  statusEl.className = "status-box warn";
-  
-  // Vercel内のAPIを叩く
+  statusEl.textContent = "サーバー中継中...";
+  addLog(`Proxyへ送信開始...`);
+
   const proxyUrl = `/api/stamp?uid=${encodeURIComponent(uid)}&sid=${encodeURIComponent(sid)}`;
-  document.getElementById("dbg-req").textContent = proxyUrl;
-  addLog(`送信開始: uid=${uid}`);
 
   try {
     const res = await fetch(proxyUrl);
-    const data = await res.json(); // Proxyから { result: "..." } が返る
+    const data = await res.json();
     
     document.getElementById("dbg-res").textContent = data.result;
-    handleResult(data.result);
-  } catch (e) {
-    addLog(`エラー: ${e.message}`, "err");
-    statusEl.textContent = "通信失敗";
-    statusEl.className = "status-box err";
-  }
-
-  // 3秒間の冷却
-  setTimeout(() => { 
-    isCooling = false;
-    if (statusEl.className.includes("warn")) {
-      statusEl.textContent = "QRをかざしてください";
-      statusEl.className = "status-box";
+    
+    if (data.result === "success") {
+      statusEl.textContent = "✅ 成功！シートに記録されました";
+      statusEl.className = "status-box ok";
+      addLog("GASからの応答: success", "ok");
+    } else {
+      statusEl.textContent = "❌ GASエラー: " + data.result;
+      statusEl.className = "status-box err";
+      addLog("GASからの応答: " + data.result, "err");
     }
-  }, 3000);
-}
-
-function handleResult(res) {
-  if (res === "success") {
-    statusEl.textContent = "✅ スタンプ取得成功！";
-    statusEl.className = "status-box ok";
-    addLog("成功: シートに記録されました", "ok");
-  } else if (res === "already") {
-    statusEl.textContent = "📌 取得済みです";
-    statusEl.className = "status-box warn";
-    addLog("重複: すでに記録があります", "warn");
-  } else {
-    statusEl.textContent = "❌ エラー: " + res;
+  } catch (e) {
+    statusEl.textContent = "❌ 中継エラー";
     statusEl.className = "status-box err";
-    addLog("GASエラー: " + res, "err");
+    addLog("Vercel Proxy通信失敗: " + e.message, "err");
   }
 }
 
 function testDirectly() {
-  addLog("手動テスト実行");
-  sendData("TEST_USER", "TEST_SPOT");
+  sendData(UID, "TEST_SPOT");
 }
+
+statusEl.textContent = "待機中";
 </script>
 </body>
 </html>
