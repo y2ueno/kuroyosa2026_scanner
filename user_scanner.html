@@ -11,9 +11,10 @@
         #video { position: absolute; top: 0; left: 0; width: 100%; height: 100%; object-fit: cover; }
         #canvas { position: absolute; top: 0; left: 0; width: 100%; height: 100%; opacity: 0; }
         #msg { margin-top: 20px; padding: 15px; border-radius: 12px; font-weight: bold; background: #fff; min-height: 60px; border: 2px solid #ccc; }
-        .status-success { color: #188038; background: #e6f4ea !important; border-color: #34a853 !important; }
-        .status-already { color: #d93025; background: #fce8e6 !important; }
-        .status-error   { color: #d93025; }
+        .status-success  { color: #188038; background: #e6f4ea !important; border-color: #34a853 !important; }
+        .status-complete { color: #b5600f; background: #fff3e0 !important; border-color: #ff9800 !important; }
+        .status-already  { color: #d93025; background: #fce8e6 !important; }
+        .status-error    { color: #d93025; }
     </style>
 </head>
 <body>
@@ -69,24 +70,18 @@
                 // 重複チェック
                 const checkRes = await fetch(
                     `${SUPABASE_URL}/rest/v1/stamps?user_id=eq.${encodeURIComponent(myUserId)}&spot_id=eq.${encodeURIComponent(spotId)}`,
-                    {
-                        headers: {
-                            "apikey": SUPABASE_KEY,
-                            "Authorization": "Bearer " + SUPABASE_KEY
-                        }
-                    }
+                    { headers: { "apikey": SUPABASE_KEY, "Authorization": "Bearer " + SUPABASE_KEY } }
                 );
                 const existing = await checkRes.json();
 
                 if (existing.length > 0) {
-                    msg.innerHTML = "取得済みです";
+                    msg.innerHTML = "このスポットは取得済みです";
                     msg.className = "status-already";
                     setTimeout(() => { isScanning = true; msg.innerText = "QRをスキャンしてください"; msg.className = ""; }, 3000);
                     return;
                 }
 
                 // 新規登録
-                const ts = new Date().toLocaleString("ja-JP");
                 const insertRes = await fetch(
                     `${SUPABASE_URL}/rest/v1/stamps`,
                     {
@@ -97,18 +92,53 @@
                             "Content-Type": "application/json",
                             "Prefer": "return=minimal"
                         },
-                        body: JSON.stringify({ user_id: myUserId, spot_id: spotId, timestamp: ts })
+                        body: JSON.stringify({
+                            user_id: myUserId,
+                            spot_id: spotId,
+                            timestamp: new Date().toLocaleString("ja-JP")
+                        })
                     }
                 );
 
-                if (insertRes.ok) {
-                    msg.innerHTML = "✅ スタンプを取得！";
-                    msg.className = "status-success";
-                } else {
+                if (!insertRes.ok) {
                     const err = await insertRes.text();
                     msg.innerText = "エラー: " + err;
                     msg.className = "status-error";
                     setTimeout(() => { isScanning = true; msg.innerText = "QRをスキャンしてください"; msg.className = ""; }, 3000);
+                    return;
+                }
+
+                // スタンプ数確認
+                const allRes = await fetch(
+                    `${SUPABASE_URL}/rest/v1/stamps?user_id=eq.${encodeURIComponent(myUserId)}&select=spot_id`,
+                    { headers: { "apikey": SUPABASE_KEY, "Authorization": "Bearer " + SUPABASE_KEY } }
+                );
+                const allStamps = await allRes.json();
+                const uniqueCount = new Set(allStamps.map(s => s.spot_id)).size;
+
+                if (uniqueCount >= 4) {
+                    // コンプリート賞エントリー
+                    await fetch(
+                        `${SUPABASE_URL}/rest/v1/stamps?user_id=eq.${encodeURIComponent(myUserId)}`,
+                        {
+                            method: "PATCH",
+                            headers: {
+                                "apikey": SUPABASE_KEY,
+                                "Authorization": "Bearer " + SUPABASE_KEY,
+                                "Content-Type": "application/json",
+                                "Prefer": "return=minimal"
+                            },
+                            body: JSON.stringify({
+                                complete_entry: true,
+                                complete_entry_at: new Date().toISOString()
+                            })
+                        }
+                    );
+                    msg.innerHTML = "🎉 コンプリート！<br>抽選にエントリーされました！";
+                    msg.className = "status-complete";
+                } else {
+                    msg.innerHTML = `✅ スタンプ取得！（${uniqueCount}/4）`;
+                    msg.className = "status-success";
                 }
 
             } catch (e) {
