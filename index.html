@@ -15,7 +15,24 @@
             color: #333;
             min-height: 100dvh;
         }
-        h1 { font-size: 1.2rem; margin-bottom: 20px; color: #1a73e8; }
+        h1 { font-size: 1.2rem; margin-bottom: 4px; color: #1a73e8; }
+
+        #staff-badge {
+            display: inline-block;
+            margin-bottom: 16px;
+            padding: 3px 12px;
+            border-radius: 999px;
+            font-size: 12px;
+            font-weight: bold;
+            background: #e8f0fe;
+            color: #1a73e8;
+            border: 1px solid #c5d0f5;
+        }
+        #staff-badge.unknown {
+            background: #fce8e6;
+            color: #d93025;
+            border-color: #f5c5c2;
+        }
 
         #wrapper {
             position: relative;
@@ -31,7 +48,6 @@
         }
         #canvas { width: 100%; height: 100%; object-fit: cover; }
 
-        /* 枠線スキャンアニメーション */
         #scan-line {
             position: absolute;
             left: 10%; width: 80%; height: 2px;
@@ -39,10 +55,7 @@
             animation: scan 2s linear infinite;
             pointer-events: none;
         }
-        @keyframes scan {
-            0%   { top: 10%; }
-            100% { top: 90%; }
-        }
+        @keyframes scan { 0% { top: 10%; } 100% { top: 90%; } }
 
         #msg {
             margin-top: 20px;
@@ -65,10 +78,7 @@
         .status-already { color: #7b1fa2; background: #f3e5f5 !important; border: 2px solid #ab47bc; }
         .status-lack    { color: #e65100; background: #fff3e0 !important; border: 2px solid #fb8c00; }
 
-        @keyframes blink {
-            0%,100% { opacity: 1; }
-            50%      { opacity: 0.4; }
-        }
+        @keyframes blink { 0%,100% { opacity: 1; } 50% { opacity: 0.4; } }
 
         .prize-badge {
             display: inline-block;
@@ -96,13 +106,12 @@
             box-shadow: 0 2px 6px rgba(26,115,232,0.3);
         }
         #retry-btn:active { background: #0d47a1; }
-
         .hint { font-size: 12px; color: #777; margin-top: 12px; }
     </style>
 </head>
 <body>
-
     <h1>🎁 景品交換スキャナー</h1>
+    <div id="staff-badge">読み込み中...</div>
 
     <div id="wrapper">
         <video id="video" style="display:none" playsinline></video>
@@ -111,20 +120,30 @@
     </div>
 
     <div id="msg" class="status-wait">カメラの起動を準備中...</div>
-
     <button id="retry-btn" onclick="resetScanner()">次の人をスキャン</button>
-
     <p class="hint">※カメラの利用許可を求めるポップアップが出たら「許可」をタップしてください</p>
 
     <script>
-        const video  = document.getElementById("video");
-        const canvas = document.getElementById("canvas");
-        const ctx    = canvas.getContext("2d");
-        const msg    = document.getElementById("msg");
-        const retryBtn = document.getElementById("retry-btn");
-        const scanLine = document.getElementById("scan-line");
+        const video      = document.getElementById("video");
+        const canvas     = document.getElementById("canvas");
+        const ctx        = canvas.getContext("2d");
+        const msg        = document.getElementById("msg");
+        const retryBtn   = document.getElementById("retry-btn");
+        const scanLine   = document.getElementById("scan-line");
+        const staffBadge = document.getElementById("staff-badge");
 
         const GAS_URL = "https://script.google.com/macros/s/AKfycbwPTNdb1Y94X1L1-AM6bykD0gnNbHvoxqycEAs8XTSQPujLsl6ZRvUla0042zeUyG-5/exec";
+
+        // ★ URLパラメータからスタッフIDを取得
+        const STAFF_ID = new URLSearchParams(window.location.search).get("staff") || "";
+
+        // スタッフIDをバッジ表示
+        if (STAFF_ID) {
+            staffBadge.textContent = "スタッフ：" + STAFF_ID;
+        } else {
+            staffBadge.textContent = "⚠️ スタッフID未設定";
+            staffBadge.classList.add("unknown");
+        }
 
         let isScanning = true;
 
@@ -148,10 +167,8 @@
                 canvas.height = video.videoHeight;
                 canvas.width  = video.videoWidth;
                 ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-
                 const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
                 const code = jsQR(imageData.data, imageData.width, imageData.height);
-
                 if (code) {
                     isScanning = false;
                     scanLine.style.display = "none";
@@ -165,17 +182,16 @@
             msg.innerText = "判定中...";
             msg.className = "status-sending";
 
-            // no-cors を使わず通常のfetchでレスポンスを受け取る
+            // ★ staffId を body に含めて送信
             fetch(GAS_URL, {
                 method: "POST",
                 headers: { "Content-Type": "text/plain" },
-                body: JSON.stringify({ userId: userId })
+                body: JSON.stringify({ userId: userId, staffId: STAFF_ID })
             })
             .then(res => res.json())
             .then(data => handleResult(data, userId))
             .catch(err => {
-                // CORS問題のフォールバック：GETで再試行
-                return fetch(`${GAS_URL}?userId=${encodeURIComponent(userId)}`)
+                return fetch(`${GAS_URL}?userId=${encodeURIComponent(userId)}&staffId=${encodeURIComponent(STAFF_ID)}`)
                     .then(res => res.json())
                     .then(data => handleResult(data, userId))
                     .catch(e => {
@@ -197,22 +213,18 @@
                     ${prize}<br>
                     <small style="font-weight:normal;color:#555;">スタンプ数：${data.count}個</small>`;
                 msg.className = "status-success";
-
             } else if (data.status === "already_exchanged") {
                 msg.innerHTML = `⚠️ 交換済み<br>
                     <small style="font-weight:normal;color:#555;">この方はすでに景品を受け取っています</small>`;
                 msg.className = "status-already";
-
             } else if (data.status === "not_enough") {
                 msg.innerHTML = `❌ スタンプ不足<br>
                     <small style="font-weight:normal;color:#555;">現在 ${data.count}個 ／ 3個以上必要</small>`;
                 msg.className = "status-lack";
-
             } else {
                 msg.innerHTML = `❓ 不明なエラー<br><small>${JSON.stringify(data)}</small>`;
                 msg.className = "status-error";
             }
-
             retryBtn.style.display = "block";
         }
 
