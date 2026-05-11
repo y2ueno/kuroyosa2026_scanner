@@ -1,152 +1,326 @@
 <!DOCTYPE html>
 <html lang="ja">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Scanner</title>
-    <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js"></script>
-    <style>
-        body { text-align: center; font-family: sans-serif; background: #fff5e6; margin: 0; padding: 20px; }
-        #wrapper { position: relative; width: 100%; max-width: 360px; margin: 0 auto; aspect-ratio: 1/1; border-radius: 20px; overflow: hidden; background: #000; border: 4px solid #fff; }
-        #video { position: absolute; top: 0; left: 0; width: 100%; height: 100%; object-fit: cover; }
-        #canvas { position: absolute; top: 0; left: 0; width: 100%; height: 100%; opacity: 0; }
-        #msg { margin-top: 20px; padding: 15px; border-radius: 12px; font-weight: bold; background: #fff; min-height: 60px; border: 2px solid #ccc; }
-        .status-success  { color: #188038; background: #e6f4ea !important; border-color: #34a853 !important; }
-        .status-complete { color: #b5600f; background: #fff3e0 !important; border-color: #ff9800 !important; }
-        .status-already  { color: #d93025; background: #fce8e6 !important; }
-        .status-error    { color: #d93025; }
-    </style>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>Scanner</title>
+  <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js"></script>
+  <style>
+    body {
+      text-align: center;
+      font-family: sans-serif;
+      background: #fff5e6;
+      margin: 0;
+      padding: 20px;
+    }
+
+    #wrapper {
+      position: relative;
+      width: 100%;
+      max-width: 360px;
+      margin: 0 auto;
+      aspect-ratio: 1 / 1;
+      border-radius: 20px;
+      overflow: hidden;
+      background: #000;
+      border: 4px solid #fff;
+    }
+
+    #video {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+    }
+
+    #canvas {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      opacity: 0;
+    }
+
+    #msg {
+      margin-top: 20px;
+      padding: 15px;
+      border-radius: 12px;
+      font-weight: bold;
+      background: #fff;
+      min-height: 60px;
+      border: 2px solid #ccc;
+      line-height: 1.5;
+      white-space: pre-line;
+    }
+
+    .status-success  { color: #188038; background: #e6f4ea !important; border-color: #34a853 !important; }
+    .status-complete { color: #b5600f; background: #fff3e0 !important; border-color: #ff9800 !important; }
+    .status-already  { color: #d93025; background: #fce8e6 !important; border-color: #d93025 !important; }
+    .status-error    { color: #d93025; background: #fce8e6 !important; border-color: #d93025 !important; }
+    .status-info     { color: #174ea6; background: #e8f0fe !important; border-color: #4285f4 !important; }
+  </style>
 </head>
 <body>
-    <div id="wrapper">
-        <video id="video" autoplay playsinline muted></video>
-        <canvas id="canvas"></canvas>
-    </div>
-    <div id="msg">カメラ起動中...</div>
+  <div id="wrapper">
+    <video id="video" autoplay playsinline muted></video>
+    <canvas id="canvas"></canvas>
+  </div>
 
-    <script>
-        const SUPABASE_URL = "https://ucrwpjmmmxfdkmzewtcp.supabase.co";
-        const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InVjcndwam1tbXhmZGttemV3dGNwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzgzMzc1MTAsImV4cCI6MjA5MzkxMzUxMH0.nNfB1yuudSp-p0yZS15_ZuZOdTco6rRHxZmGV5vT9TA";
+  <div id="msg">カメラ起動中...</div>
 
-        const video = document.getElementById("video");
-        const canvas = document.getElementById("canvas");
-        const ctx = canvas.getContext("2d", { willReadFrequently: true });
-        const msg = document.getElementById("msg");
-        const myUserId = new URLSearchParams(window.location.search).get("uid") || "";
-        let isScanning = true;
+  <script>
+    const SUPABASE_URL = "https://ucrwpjmmmxfdkmzewtcp.supabase.co";
+    const SUPABASE_KEY = "sb_publishable_a3q5s8toPwGWzu5EnX7VqA_ZQMeUm_e";
 
-        navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } })
-        .then(stream => {
-            video.srcObject = stream;
-            video.onloadedmetadata = () => {
-                video.play();
-                msg.innerText = "QRをスキャンしてください";
-                requestAnimationFrame(tick);
-            };
-        })
-        .catch(err => {
-            msg.innerText = "カメラエラー: " + err.message;
-            msg.className = "status-error";
+    const SPOTS_API_URL =
+      "https://script.google.com/macros/s/AKfycbwxzKwjgXaEoKs58M-TNvUAxBUpy9F6462ftPizV-L0KDt5WkFJLXHeWhH4DFwY2DvH/exec?mode=spots";
+
+    const video = document.getElementById("video");
+    const canvas = document.getElementById("canvas");
+    const ctx = canvas.getContext("2d", { willReadFrequently: true });
+    const msg = document.getElementById("msg");
+
+    const params = new URLSearchParams(window.location.search);
+    const stampUserId = params.get("stamp_user_id") || "";
+
+    let isScanning = true;
+    let validSpotIds = new Set();
+
+    function setMessage(text, className = "") {
+      msg.innerText = text;
+      msg.className = className;
+    }
+
+    function resetScanner(delay = 3000) {
+      setTimeout(() => {
+        isScanning = true;
+        setMessage("QRをスキャンしてください");
+        requestAnimationFrame(tick);
+      }, delay);
+    }
+
+    function backToPrevious(delay = 2000) {
+      setTimeout(() => {
+        if (window.history.length > 1) {
+          window.history.back();
+        } else {
+          setMessage("スタンプ取得後、前の画面に戻ってください", "status-success");
+        }
+      }, delay);
+    }
+
+    async function fetchTextSafe(res) {
+      const text = await res.text();
+      return text || `${res.status} ${res.statusText}`;
+    }
+
+    async function loadValidSpots() {
+      const res = await fetch(SPOTS_API_URL);
+
+      if (!res.ok) {
+        throw new Error("スポット一覧取得失敗: " + await fetchTextSafe(res));
+      }
+
+      const json = await res.json();
+
+      if (!json.ok) {
+        throw new Error(json.error || "スポット一覧取得エラー");
+      }
+
+      if (!Array.isArray(json.spots)) {
+        throw new Error("スポット一覧の形式が不正です");
+      }
+
+      validSpotIds = new Set(
+        json.spots
+          .map(v => String(v || "").trim())
+          .filter(Boolean)
+      );
+    }
+
+    async function startCamera() {
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({
+          video: { facingMode: { ideal: "environment" } },
+          audio: false
         });
 
-        function tick() {
-            if (video.readyState >= 2 && isScanning) {
-                canvas.width = video.videoWidth;
-                canvas.height = video.videoHeight;
-                ctx.drawImage(video, 0, 0);
-                const code = jsQR(ctx.getImageData(0, 0, canvas.width, canvas.height).data, canvas.width, canvas.height);
-                if (code) {
-                    isScanning = false;
-                    sendData(code.data);
-                }
-            }
-            if (isScanning) requestAnimationFrame(tick);
+        video.srcObject = stream;
+        video.onloadedmetadata = () => {
+          video.play();
+          setMessage("QRをスキャンしてください");
+          requestAnimationFrame(tick);
+        };
+      } catch (err) {
+        setMessage("カメラエラー: " + err.message, "status-error");
+      }
+    }
+
+    function tick() {
+      if (!isScanning) return;
+
+      if (video.readyState >= 2) {
+        canvas.width = video.videoWidth;
+        canvas.height = video.videoHeight;
+        ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+
+        const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+        const code = jsQR(imageData.data, canvas.width, canvas.height);
+
+        if (code && code.data) {
+          isScanning = false;
+          handleScan(code.data.trim());
+          return;
+        }
+      }
+
+      requestAnimationFrame(tick);
+    }
+
+    async function handleScan(scannedValue) {
+      setMessage("照合中...", "status-info");
+
+      if (!stampUserId) {
+        setMessage("stamp_user_id がありません", "status-error");
+        resetScanner();
+        return;
+      }
+
+      const spotId = scannedValue;
+
+      try {
+        // 1) Spot の正当性チェック
+        if (!validSpotIds.has(spotId)) {
+          setMessage("正しくないQRコードです", "status-error");
+          resetScanner();
+          return;
         }
 
-        async function sendData(spotId) {
-            msg.innerText = "照合中...";
-
-            try {
-                // 重複チェック
-                const checkRes = await fetch(
-                    `${SUPABASE_URL}/rest/v1/stamps?user_id=eq.${encodeURIComponent(myUserId)}&spot_id=eq.${encodeURIComponent(spotId)}`,
-                    { headers: { "apikey": SUPABASE_KEY, "Authorization": "Bearer " + SUPABASE_KEY } }
-                );
-                const existing = await checkRes.json();
-
-                if (existing.length > 0) {
-                    msg.innerHTML = "このスポットは取得済みです";
-                    msg.className = "status-already";
-                    setTimeout(() => { isScanning = true; msg.innerText = "QRをスキャンしてください"; msg.className = ""; }, 3000);
-                    return;
-                }
-
-                // 新規登録
-                const insertRes = await fetch(
-                    `${SUPABASE_URL}/rest/v1/stamps`,
-                    {
-                        method: "POST",
-                        headers: {
-                            "apikey": SUPABASE_KEY,
-                            "Authorization": "Bearer " + SUPABASE_KEY,
-                            "Content-Type": "application/json",
-                            "Prefer": "return=minimal"
-                        },
-                        body: JSON.stringify({
-                            user_id: myUserId,
-                            spot_id: spotId,
-                            timestamp: new Date().toLocaleString("ja-JP")
-                        })
-                    }
-                );
-
-                if (!insertRes.ok) {
-                    const err = await insertRes.text();
-                    msg.innerText = "エラー: " + err;
-                    msg.className = "status-error";
-                    setTimeout(() => { isScanning = true; msg.innerText = "QRをスキャンしてください"; msg.className = ""; }, 3000);
-                    return;
-                }
-
-                // スタンプ数確認
-                const allRes = await fetch(
-                    `${SUPABASE_URL}/rest/v1/stamps?user_id=eq.${encodeURIComponent(myUserId)}&select=spot_id`,
-                    { headers: { "apikey": SUPABASE_KEY, "Authorization": "Bearer " + SUPABASE_KEY } }
-                );
-                const allStamps = await allRes.json();
-                const uniqueCount = new Set(allStamps.map(s => s.spot_id)).size;
-
-                if (uniqueCount >= 4) {
-                    // コンプリート賞エントリー
-                    await fetch(
-                        `${SUPABASE_URL}/rest/v1/stamps?user_id=eq.${encodeURIComponent(myUserId)}`,
-                        {
-                            method: "PATCH",
-                            headers: {
-                                "apikey": SUPABASE_KEY,
-                                "Authorization": "Bearer " + SUPABASE_KEY,
-                                "Content-Type": "application/json",
-                                "Prefer": "return=minimal"
-                            },
-                            body: JSON.stringify({
-                                complete_entry: true,
-                                complete_entry_at: new Date().toISOString()
-                            })
-                        }
-                    );
-                    msg.innerHTML = "🎉 コンプリート！<br>抽選にエントリーされました！";
-                    msg.className = "status-complete";
-                } else {
-                    msg.innerHTML = `✅ スタンプ取得！（${uniqueCount}/4）`;
-                    msg.className = "status-success";
-                }
-
-            } catch (e) {
-                msg.innerText = "通信エラー: " + e.message;
-                msg.className = "status-error";
-                setTimeout(() => { isScanning = true; msg.innerText = "QRをスキャンしてください"; msg.className = ""; }, 3000);
+        // 2) 重複チェック
+        const checkRes = await fetch(
+          `${SUPABASE_URL}/rest/v1/stamps?select=spot_id&user_id=eq.${encodeURIComponent(stampUserId)}&spot_id=eq.${encodeURIComponent(spotId)}`,
+          {
+            headers: {
+              "apikey": SUPABASE_KEY,
+              "Authorization": "Bearer " + SUPABASE_KEY
             }
+          }
+        );
+
+        if (!checkRes.ok) {
+          throw new Error("重複チェック失敗: " + await fetchTextSafe(checkRes));
         }
-    </script>
+
+        const existing = await checkRes.json();
+
+        if (Array.isArray(existing) && existing.length > 0) {
+          setMessage("このスポットは取得済みです", "status-already");
+          resetScanner();
+          return;
+        }
+
+        // 3) 新規登録
+        const nowIso = new Date().toISOString();
+
+        const insertRes = await fetch(
+          `${SUPABASE_URL}/rest/v1/stamps`,
+          {
+            method: "POST",
+            headers: {
+              "apikey": SUPABASE_KEY,
+              "Authorization": "Bearer " + SUPABASE_KEY,
+              "Content-Type": "application/json",
+              "Prefer": "return=minimal"
+            },
+            body: JSON.stringify({
+              user_id: stampUserId,
+              spot_id: spotId,
+              timestamp: nowIso,
+              exchanged: false,
+              complete_entry: false
+            })
+          }
+        );
+
+        if (!insertRes.ok) {
+          throw new Error("登録失敗: " + await fetchTextSafe(insertRes));
+        }
+
+        // 4) ユニーク spot 数確認
+        const allRes = await fetch(
+          `${SUPABASE_URL}/rest/v1/stamps?select=spot_id&user_id=eq.${encodeURIComponent(stampUserId)}`,
+          {
+            headers: {
+              "apikey": SUPABASE_KEY,
+              "Authorization": "Bearer " + SUPABASE_KEY
+            }
+          }
+        );
+
+        if (!allRes.ok) {
+          throw new Error("スタンプ数確認失敗: " + await fetchTextSafe(allRes));
+        }
+
+        const allStamps = await allRes.json();
+        const uniqueCount = new Set(
+          (allStamps || [])
+            .map(s => String(s.spot_id || "").trim())
+            .filter(Boolean)
+        ).size;
+
+        // 5) 4スポット達成時は complete_entry を更新
+        if (uniqueCount >= 4) {
+          const patchRes = await fetch(
+            `${SUPABASE_URL}/rest/v1/stamps?user_id=eq.${encodeURIComponent(stampUserId)}&complete_entry=eq.false`,
+            {
+              method: "PATCH",
+              headers: {
+                "apikey": SUPABASE_KEY,
+                "Authorization": "Bearer " + SUPABASE_KEY,
+                "Content-Type": "application/json",
+                "Prefer": "return=minimal"
+              },
+              body: JSON.stringify({
+                complete_entry: true,
+                complete_entry_at: nowIso
+              })
+            }
+          );
+
+          if (!patchRes.ok) {
+            throw new Error("コンプリート更新失敗: " + await fetchTextSafe(patchRes));
+          }
+
+          setMessage("コンプリート！\n抽選にエントリーされました！", "status-complete");
+          backToPrevious(2000);
+          return;
+        }
+
+        // 6) 通常成功
+        setMessage(`スタンプ取得！（${uniqueCount}/4）`, "status-success");
+        backToPrevious(2000);
+
+      } catch (e) {
+        setMessage("通信エラー: " + e.message, "status-error");
+        resetScanner();
+      }
+    }
+
+    (async function init() {
+      try {
+        if (!stampUserId) {
+          setMessage("stamp_user_id が渡されていません", "status-error");
+          return;
+        }
+
+        setMessage("準備中...", "status-info");
+        await loadValidSpots();
+        await startCamera();
+      } catch (e) {
+        setMessage("初期化エラー: " + e.message, "status-error");
+      }
+    })();
+  </script>
 </body>
 </html>
