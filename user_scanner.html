@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-  <title>Scanner</title>
+  <title>Scanner Debug</title>
   <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js"></script>
   <style>
     body {
@@ -42,16 +42,22 @@
       opacity: 0;
     }
 
-    #msg {
+    #msg, #debug {
       margin-top: 20px;
       padding: 15px;
       border-radius: 12px;
-      font-weight: bold;
       background: #fff;
       min-height: 60px;
       border: 2px solid #ccc;
       line-height: 1.5;
-      white-space: pre-line;
+      white-space: pre-wrap;
+      word-break: break-all;
+      text-align: left;
+    }
+
+    #msg {
+      font-weight: bold;
+      text-align: center;
     }
 
     .status-success  { color: #188038; background: #e6f4ea !important; border-color: #34a853 !important; }
@@ -59,6 +65,11 @@
     .status-already  { color: #d93025; background: #fce8e6 !important; border-color: #d93025 !important; }
     .status-error    { color: #d93025; background: #fce8e6 !important; border-color: #d93025 !important; }
     .status-info     { color: #174ea6; background: #e8f0fe !important; border-color: #4285f4 !important; }
+
+    .debug-title {
+      font-weight: bold;
+      margin-bottom: 8px;
+    }
   </style>
 </head>
 <body>
@@ -67,12 +78,16 @@
     <canvas id="canvas"></canvas>
   </div>
 
-  <div id="msg">カメラ起動中...</div>
+  <div id="msg">初期化中...</div>
+
+  <div id="debug">
+    <div class="debug-title">Debug</div>
+    読み込み中...
+  </div>
 
   <script>
     const SUPABASE_URL = "https://ucrwpjmmmxfdkmzewtcp.supabase.co";
     const SUPABASE_KEY = "sb_publishable_a3q5s8toPwGWzu5EnX7VqA_ZQMeUm_e";
-
     const SPOTS_API_URL =
       "https://script.google.com/macros/s/AKfycbwxzKwjgXaEoKs58M-TNvUAxBUpy9F6462ftPizV-L0KDt5WkFJLXHeWhH4DFwY2DvH/exec?mode=spots";
 
@@ -80,9 +95,14 @@
     const canvas = document.getElementById("canvas");
     const ctx = canvas.getContext("2d", { willReadFrequently: true });
     const msg = document.getElementById("msg");
+    const debug = document.getElementById("debug");
 
-    const params = new URLSearchParams(window.location.search);
-    const stampUserId = params.get("stamp_user_id") || "";
+    const queryParams = new URLSearchParams(window.location.search);
+    const hashParams = new URLSearchParams((window.location.hash || "").replace(/^#/, ""));
+    const stampUserId =
+      queryParams.get("stamp_user_id") ||
+      hashParams.get("stamp_user_id") ||
+      "";
 
     let isScanning = true;
     let validSpotIds = new Set();
@@ -92,21 +112,32 @@
       msg.className = className;
     }
 
+    function setDebug() {
+      debug.innerText =
+`href:
+${window.location.href}
+
+search:
+${window.location.search}
+
+hash:
+${window.location.hash}
+
+query stamp_user_id:
+${queryParams.get("stamp_user_id")}
+
+hash stamp_user_id:
+${hashParams.get("stamp_user_id")}
+
+resolved stamp_user_id:
+${stampUserId}`;
+    }
+
     function resetScanner(delay = 3000) {
       setTimeout(() => {
         isScanning = true;
         setMessage("QRをスキャンしてください");
         requestAnimationFrame(tick);
-      }, delay);
-    }
-
-    function backToPrevious(delay = 2000) {
-      setTimeout(() => {
-        if (window.history.length > 1) {
-          window.history.back();
-        } else {
-          setMessage("スタンプ取得後、前の画面に戻ってください", "status-success");
-        }
       }, delay);
     }
 
@@ -182,7 +213,7 @@
       setMessage("照合中...", "status-info");
 
       if (!stampUserId) {
-        setMessage("stamp_user_id がありません", "status-error");
+        setMessage("stamp_user_id が渡されていません", "status-error");
         resetScanner();
         return;
       }
@@ -190,116 +221,14 @@
       const spotId = scannedValue;
 
       try {
-        // 1) Spot の正当性チェック
         if (!validSpotIds.has(spotId)) {
           setMessage("正しくないQRコードです", "status-error");
           resetScanner();
           return;
         }
 
-        // 2) 重複チェック
-        const checkRes = await fetch(
-          `${SUPABASE_URL}/rest/v1/stamps?select=spot_id&user_id=eq.${encodeURIComponent(stampUserId)}&spot_id=eq.${encodeURIComponent(spotId)}`,
-          {
-            headers: {
-              "apikey": SUPABASE_KEY,
-              "Authorization": "Bearer " + SUPABASE_KEY
-            }
-          }
-        );
-
-        if (!checkRes.ok) {
-          throw new Error("重複チェック失敗: " + await fetchTextSafe(checkRes));
-        }
-
-        const existing = await checkRes.json();
-
-        if (Array.isArray(existing) && existing.length > 0) {
-          setMessage("このスポットは取得済みです", "status-already");
-          resetScanner();
-          return;
-        }
-
-        // 3) 新規登録
-        const nowIso = new Date().toISOString();
-
-        const insertRes = await fetch(
-          `${SUPABASE_URL}/rest/v1/stamps`,
-          {
-            method: "POST",
-            headers: {
-              "apikey": SUPABASE_KEY,
-              "Authorization": "Bearer " + SUPABASE_KEY,
-              "Content-Type": "application/json",
-              "Prefer": "return=minimal"
-            },
-            body: JSON.stringify({
-              user_id: stampUserId,
-              spot_id: spotId,
-              timestamp: nowIso,
-              exchanged: false,
-              complete_entry: false
-            })
-          }
-        );
-
-        if (!insertRes.ok) {
-          throw new Error("登録失敗: " + await fetchTextSafe(insertRes));
-        }
-
-        // 4) ユニーク spot 数確認
-        const allRes = await fetch(
-          `${SUPABASE_URL}/rest/v1/stamps?select=spot_id&user_id=eq.${encodeURIComponent(stampUserId)}`,
-          {
-            headers: {
-              "apikey": SUPABASE_KEY,
-              "Authorization": "Bearer " + SUPABASE_KEY
-            }
-          }
-        );
-
-        if (!allRes.ok) {
-          throw new Error("スタンプ数確認失敗: " + await fetchTextSafe(allRes));
-        }
-
-        const allStamps = await allRes.json();
-        const uniqueCount = new Set(
-          (allStamps || [])
-            .map(s => String(s.spot_id || "").trim())
-            .filter(Boolean)
-        ).size;
-
-        // 5) 4スポット達成時は complete_entry を更新
-        if (uniqueCount >= 4) {
-          const patchRes = await fetch(
-            `${SUPABASE_URL}/rest/v1/stamps?user_id=eq.${encodeURIComponent(stampUserId)}&complete_entry=eq.false`,
-            {
-              method: "PATCH",
-              headers: {
-                "apikey": SUPABASE_KEY,
-                "Authorization": "Bearer " + SUPABASE_KEY,
-                "Content-Type": "application/json",
-                "Prefer": "return=minimal"
-              },
-              body: JSON.stringify({
-                complete_entry: true,
-                complete_entry_at: nowIso
-              })
-            }
-          );
-
-          if (!patchRes.ok) {
-            throw new Error("コンプリート更新失敗: " + await fetchTextSafe(patchRes));
-          }
-
-          setMessage("コンプリート！\n抽選にエントリーされました！", "status-complete");
-          backToPrevious(2000);
-          return;
-        }
-
-        // 6) 通常成功
-        setMessage(`スタンプ取得！（${uniqueCount}/4）`, "status-success");
-        backToPrevious(2000);
+        setMessage(`読み取りOK: ${spotId}`, "status-success");
+        resetScanner(1500);
 
       } catch (e) {
         setMessage("通信エラー: " + e.message, "status-error");
@@ -309,6 +238,8 @@
 
     (async function init() {
       try {
+        setDebug();
+
         if (!stampUserId) {
           setMessage("stamp_user_id が渡されていません", "status-error");
           return;
