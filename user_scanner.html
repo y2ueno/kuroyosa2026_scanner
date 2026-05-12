@@ -7,7 +7,6 @@
   <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <style>
-    /* レンダリングの乱れを防止するCSS */
     body { text-align: center; font-family: sans-serif; background: #fff5e6; margin: 0; padding: 20px; touch-action: manipulation; }
     #wrapper { 
       position: relative; width: 100%; max-width: 340px; margin: 0 auto; 
@@ -15,10 +14,10 @@
       background: #000; border: 4px solid #fff; box-shadow: 0 4px 15px rgba(0,0,0,0.1);
     }
     #video { 
-      position: absolute; inset: 0; width: 100%; height: 100%; 
-      object-fit: cover; /* 歪みを防止し、枠に合わせてトリミング */
+      position: absolute; top: 0; left: 0; width: 100%; height: 100%; 
+      object-fit: cover; /* これで映像の歪みを防止 */
+      transform: scale(1.0);
     }
-    #canvas { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
     #msg { 
       margin-top: 15px; padding: 12px; border-radius: 12px; font-weight: bold; 
       background: #fff; min-height: 50px; border: 2px solid #ccc; font-size: 0.95rem;
@@ -27,17 +26,12 @@
     .status-success { color: #188038; background: #e6f4ea !important; border-color: #34a853 !important; }
     .status-error   { color: #d93025; background: #fce8e6 !important; border-color: #d93025 !important; }
     .status-info    { color: #174ea6; background: #e8f0fe !important; border-color: #4285f4 !important; }
-    .guide { 
-      position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
-      width: 65%; height: 65%; border: 2px solid rgba(255,255,255,0.4); border-radius: 10px;
-    }
   </style>
 </head>
 <body>
   <div id="wrapper">
     <video id="video" autoplay playsinline muted></video>
-    <canvas id="canvas"></canvas>
-    <div class="guide"></div>
+    <canvas id="canvas" style="display:none;"></canvas>
   </div>
   <div id="msg">カメラ起動中...</div>
 
@@ -60,12 +54,14 @@
         return;
       }
       try {
-        const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } });
+        const stream = await navigator.mediaDevices.getUserMedia({ 
+          video: { facingMode: "environment", width: { ideal: 1280 }, height: { ideal: 1280 } } 
+        });
         video.srcObject = stream;
         video.onloadedmetadata = () => {
           video.play();
           isScanning = true;
-          msg.innerText = "QRコードを枠内に収めてください";
+          msg.innerText = "QRコードを読み取ってください";
           requestAnimationFrame(tick);
         };
       } catch (err) {
@@ -76,7 +72,7 @@
 
     function tick() {
       if (video.readyState === video.HAVE_ENOUGH_DATA && isScanning) {
-        const canvas = document.getElementById('canvas');
+        const canvas = document.createElement('canvas');
         const ctx = canvas.getContext('2d');
         canvas.height = video.videoHeight;
         canvas.width = video.videoWidth;
@@ -94,14 +90,14 @@
     }
 
     async function handleDiscovery(spotId) {
-      msg.innerText = "送信中...";
+      msg.innerText = "データ照会中...";
       msg.className = "status-info";
 
       try {
-        // 重複チェック
+        // 重複チェック (id列ではなくuser_id列を参照するように修正)
         const { data: existing, error: checkError } = await supabaseClient
           .from('stamps')
-          .select('id')
+          .select('user_id') 
           .eq('user_id', userId)
           .eq('spot_id', spotId)
           .maybeSingle();
@@ -109,7 +105,7 @@
         if (checkError) throw new Error("照会失敗: " + checkError.message);
 
         if (existing) {
-          msg.innerText = "取得済みスタンプです\n(" + spotId + ")";
+          msg.innerText = "このスポットのスタンプは\n取得済みです (" + spotId + ")";
           msg.className = "status-error";
           setTimeout(() => { isScanning = true; requestAnimationFrame(tick); }, 3000);
           return;
@@ -121,9 +117,7 @@
           .insert([{ 
             user_id: userId, 
             spot_id: spotId,
-            timestamp: new Date().toISOString(),
-            exchanged: false,
-            complete_entry: false
+            timestamp: new Date().toISOString()
           }]);
 
         if (insertError) throw new Error("登録失敗: " + insertError.message);
@@ -133,10 +127,8 @@
         if (navigator.vibrate) navigator.vibrate(200);
 
       } catch (err) {
-        // 具体的なエラーメッセージを画面に表示する
         msg.innerText = "【通信エラー】\n" + err.message;
         msg.className = "status-error";
-        // 5秒後に再試行可能にする
         setTimeout(() => { isScanning = true; requestAnimationFrame(tick); }, 5000);
       }
     }
