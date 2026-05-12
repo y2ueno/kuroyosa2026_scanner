@@ -1,36 +1,157 @@
 <!DOCTYPE html>
-<!-- デバッグ版で正常動作確認済み → 本番版 -->
 <html lang="ja">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-  <title>Scanner</title>
+  <title>よさこい2026 スタンプスキャナー</title>
+  
   <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+
   <style>
-    /* 省略（前回の最終版と同じ） */
-    body { text-align: center; font-family: sans-serif; background: #fff5e6; margin: 0; padding: 20px; }
-    #wrapper { position: relative; width: 100%; max-width: 360px; margin: 0 auto; aspect-ratio: 1 / 1; border-radius: 20px; overflow: hidden; background: #000; border: 4px solid #fff; }
+    body { text-align: center; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #fff5e6; margin: 0; padding: 20px; overflow: hidden; }
+    #wrapper { position: relative; width: 100%; max-width: 360px; margin: 0 auto; aspect-ratio: 1 / 1; border-radius: 24px; overflow: hidden; background: #000; border: 4px solid #fff; box-shadow: 0 8px 24px rgba(0,0,0,0.2); }
     #video { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
-    #canvas { position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; }
-    #msg { margin-top: 20px; padding: 15px; border-radius: 12px; font-weight: bold; background: #fff; min-height: 60px; border: 2px solid #ccc; line-height: 1.5; white-space: pre-line; }
-    .status-success  { color: #188038; background: #e6f4ea !important; border-color: #34a853 !important; }
-    .status-complete { color: #b5600f; background: #fff3e0 !important; border-color: #ff9800 !important; }
-    .status-already  { color: #d93025; background: #fce8e6 !important; border-color: #d93025 !important; }
-    .status-error    { color: #d93025; background: #fce8e6 !important; border-color: #d93025 !important; }
-    .status-info     { color: #174ea6; background: #e8f0fe !important; border-color: #4285f4 !important; }
+    #canvas { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
+    #msg { margin-top: 20px; padding: 15px; border-radius: 16px; font-weight: bold; background: #fff; min-height: 60px; border: 2px solid #ccc; line-height: 1.5; font-size: 1.1rem; transition: all 0.3s; }
+    
+    /* ステータス別カラー */
+    .status-wait    { color: #5f6368; }
+    .status-success { color: #188038; background: #e6f4ea !important; border-color: #34a853 !important; }
+    .status-error   { color: #d93025; background: #fce8e6 !important; border-color: #d93025 !important; }
+    .status-info    { color: #174ea6; background: #e8f0fe !important; border-color: #4285f4 !important; }
+    
+    /* スキャンガイド枠 */
+    .guide-box { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 70%; height: 70%; border: 2px solid rgba(255,255,255,0.5); border-radius: 12px; box-sizing: border-box; }
   </style>
 </head>
 <body>
+
   <div id="wrapper">
     <video id="video" autoplay playsinline muted></video>
     <canvas id="canvas"></canvas>
+    <div class="guide-box"></div>
   </div>
-  <div id="msg">カメラ起動中...</div>
+  
+  <div id="msg" class="status-wait">カメラを起動しています...</div>
 
   <script>
-    // 前回の最終版のスクリプト（デバッグ関数削除版）
-    // uid / stamp_user_id 両対応
-    // ログなしのクリーン版
+    // --- 設定：提供されたキーを使用 ---
+    const SUPABASE_URL = "https://ucrwpjmmmxfdkmzewtcp.supabase.co";
+    const SUPABASE_KEY = "sb_publishable_a3q5s8toPwGWzu5EnX7VqA_ZQMeUm_e"; // クライアント用Anon Key
+    
+    const supabase = dashboardsupabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+    const video = document.getElementById('video');
+    const canvas = document.getElementById('canvas');
+    const ctx = canvas.getContext('2d');
+    const msg = document.getElementById('msg');
+
+    // URLからユーザーIDを取得
+    const params = new URLSearchParams(window.location.search);
+    const userId = params.get('stamp_user_id') || params.get('uid');
+
+    let isScanning = false;
+
+    // --- 1. カメラ起動処理 ---
+    async function startCamera() {
+      if (!userId) {
+        msg.innerText = "エラー: ユーザーIDがありません。\nアプリから開き直してください。";
+        msg.className = "status-error";
+        return;
+      }
+
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({
+          video: { facingMode: "environment" }
+        });
+        video.srcObject = stream;
+        video.setAttribute("playsinline", true);
+        video.play();
+        
+        msg.innerText = "QRコードを読み取ってください";
+        msg.className = "status-wait";
+        isScanning = true;
+        requestAnimationFrame(tick);
+      } catch (err) {
+        console.error("Camera error:", err);
+        msg.innerText = "カメラが起動できません。\nブラウザの設定で許可してください。";
+        msg.className = "status-error";
+      }
+    }
+
+    // --- 2. スキャンループ ---
+    function tick() {
+      if (video.readyState === video.HAVE_ENOUGH_DATA && isScanning) {
+        canvas.height = video.videoHeight;
+        canvas.width = video.videoWidth;
+        ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+        
+        const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+        const code = jsQR(imageData.data, imageData.width, imageData.height, {
+          inversionAttempts: "dontInvert",
+        });
+
+        if (code && code.data) {
+          isScanning = false; // 二重送信防止
+          handleDiscovery(code.data);
+          return;
+        }
+      }
+      if (isScanning) requestAnimationFrame(tick);
+    }
+
+    // --- 3. Supabaseへのデータ登録 ---
+    async function handleDiscovery(spotId) {
+      msg.innerText = "スタンプを確認中...";
+      msg.className = "status-info";
+
+      try {
+        // すでに取得済みかチェック
+        const { data: existing, error: checkError } = await supabase
+          .from('stamps')
+          .select('id')
+          .eq('user_id', userId)
+          .eq('spot_id', spotId)
+          .maybeSingle();
+
+        if (checkError) throw checkError;
+
+        if (existing) {
+          msg.innerText = "このスポットのスタンプは\n既に取得済みです！";
+          msg.className = "status-error";
+          setTimeout(() => { isScanning = true; requestAnimationFrame(tick); }, 3000);
+          return;
+        }
+
+        // 新規登録
+        const { error: insertError } = await supabase
+          .from('stamps')
+          .insert([{ 
+            user_id: userId, 
+            spot_id: spotId,
+            created_at: new Date().toISOString()
+          }]);
+
+        if (insertError) throw insertError;
+
+        // 成功！
+        msg.innerText = "スタンプ取得成功！\n" + spotId;
+        msg.className = "status-success";
+        
+        // 成功バイブ（Androidのみ）
+        if (navigator.vibrate) navigator.vibrate(200);
+
+      } catch (err) {
+        console.error("Supabase error:", err);
+        msg.innerText = "エラーが発生しました。\nもう一度試してください。";
+        msg.className = "status-error";
+        setTimeout(() => { isScanning = true; requestAnimationFrame(tick); }, 3000);
+      }
+    }
+
+    // 起動
+    startCamera();
   </script>
 </body>
 </html>
