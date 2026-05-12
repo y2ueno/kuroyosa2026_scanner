@@ -9,20 +9,16 @@
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 
   <style>
-    body { text-align: center; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #fff5e6; margin: 0; padding: 20px; overflow: hidden; }
+    body { text-align: center; font-family: -apple-system, sans-serif; background: #fff5e6; margin: 0; padding: 20px; overflow: hidden; }
     #wrapper { position: relative; width: 100%; max-width: 360px; margin: 0 auto; aspect-ratio: 1 / 1; border-radius: 24px; overflow: hidden; background: #000; border: 4px solid #fff; box-shadow: 0 8px 24px rgba(0,0,0,0.2); }
     #video { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
     #canvas { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
-    #msg { margin-top: 20px; padding: 15px; border-radius: 16px; font-weight: bold; background: #fff; min-height: 60px; border: 2px solid #ccc; line-height: 1.5; font-size: 1.1rem; transition: all 0.3s; }
-    
-    /* ステータス別カラー */
+    #msg { margin-top: 20px; padding: 15px; border-radius: 16px; font-weight: bold; background: #fff; min-height: 60px; border: 2px solid #ccc; line-height: 1.5; font-size: 1.1rem; }
     .status-wait    { color: #5f6368; }
     .status-success { color: #188038; background: #e6f4ea !important; border-color: #34a853 !important; }
     .status-error   { color: #d93025; background: #fce8e6 !important; border-color: #d93025 !important; }
     .status-info    { color: #174ea6; background: #e8f0fe !important; border-color: #4285f4 !important; }
-    
-    /* スキャンガイド枠 */
-    .guide-box { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 70%; height: 70%; border: 2px solid rgba(255,255,255,0.5); border-radius: 12px; box-sizing: border-box; }
+    .guide-box { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 70%; height: 70%; border: 2px solid rgba(255,255,255,0.5); border-radius: 12px; }
   </style>
 </head>
 <body>
@@ -36,11 +32,13 @@
   <div id="msg" class="status-wait">カメラを起動しています...</div>
 
   <script>
-    // --- 設定：提供されたキーを使用 ---
+    // --- 設定項目 ---
     const SUPABASE_URL = "https://ucrwpjmmmxfdkmzewtcp.supabase.co";
-    const SUPABASE_KEY = "sb_publishable_a3q5s8toPwGWzu5EnX7VqA_ZQMeUm_e"; // クライアント用Anon Key
+    // ブラウザで動作するため Anon Key (publishable) を使用します
+    const SUPABASE_KEY = "sb_publishable_a3q5s8toPwGWzu5EnX7VqA_ZQMeUm_e"; 
     
-    const supabase = dashboardsupabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+    // Supabase クライアントの初期化（修正済み）
+    const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
     const video = document.getElementById('video');
     const canvas = document.getElementById('canvas');
@@ -53,10 +51,10 @@
 
     let isScanning = false;
 
-    // --- 1. カメラ起動処理 ---
+    // --- 1. カメラ起動を優先して実行 ---
     async function startCamera() {
       if (!userId) {
-        msg.innerText = "エラー: ユーザーIDがありません。\nアプリから開き直してください。";
+        msg.innerText = "エラー: ユーザーIDが不明です。\nアプリから開き直してください。";
         msg.className = "status-error";
         return;
       }
@@ -80,7 +78,7 @@
       }
     }
 
-    // --- 2. スキャンループ ---
+    // --- 2. 解析ループ ---
     function tick() {
       if (video.readyState === video.HAVE_ENOUGH_DATA && isScanning) {
         canvas.height = video.videoHeight;
@@ -93,7 +91,7 @@
         });
 
         if (code && code.data) {
-          isScanning = false; // 二重送信防止
+          isScanning = false; 
           handleDiscovery(code.data);
           return;
         }
@@ -101,14 +99,14 @@
       if (isScanning) requestAnimationFrame(tick);
     }
 
-    // --- 3. Supabaseへのデータ登録 ---
+    // --- 3. スタンプ登録処理 ---
     async function handleDiscovery(spotId) {
       msg.innerText = "スタンプを確認中...";
       msg.className = "status-info";
 
       try {
-        // すでに取得済みかチェック
-        const { data: existing, error: checkError } = await supabase
+        // 重複チェック
+        const { data: existing, error: checkError } = await supabaseClient
           .from('stamps')
           .select('id')
           .eq('user_id', userId)
@@ -124,33 +122,33 @@
           return;
         }
 
-        // 新規登録
-        const { error: insertError } = await supabase
+        // 新規登録（INSERT）
+        const { error: insertError } = await supabaseClient
           .from('stamps')
           .insert([{ 
             user_id: userId, 
             spot_id: spotId,
-            created_at: new Date().toISOString()
+            timestamp: new Date().toISOString()
           }]);
 
         if (insertError) throw insertError;
 
-        // 成功！
+        // 成功時の処理
         msg.innerText = "スタンプ取得成功！\n" + spotId;
         msg.className = "status-success";
         
-        // 成功バイブ（Androidのみ）
+        // 成功バイブレーション（Androidのみ）
         if (navigator.vibrate) navigator.vibrate(200);
 
       } catch (err) {
-        console.error("Supabase error:", err);
-        msg.innerText = "エラーが発生しました。\nもう一度試してください。";
+        console.error("Operation error:", err);
+        msg.innerText = "通信エラーが発生しました。\nもう一度試してください。";
         msg.className = "status-error";
         setTimeout(() => { isScanning = true; requestAnimationFrame(tick); }, 3000);
       }
     }
 
-    // 起動
+    // 実行開始
     startCamera();
   </script>
 </body>
