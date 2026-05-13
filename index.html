@@ -17,14 +17,14 @@
   </style>
 </head>
 <body>
-  <h1>景品交換スキャナー</h1>
-  <div id="staff-badge" style="margin: 10px 0;">読み込み中...</div>
+  <h1>スタンプ読み取り</h1>
+  <div id="staff-badge" style="margin: 10px 0; font-size: 0.8em; color: #666;"></div>
   <div id="wrapper">
     <video id="video" style="display:none" playsinline></video>
     <canvas id="canvas"></canvas>
   </div>
   <div id="msg">カメラ起動中...</div>
-  <button id="retry-btn" onclick="resetScanner()">次の人をスキャン</button>
+  <button id="retry-btn" onclick="resetScanner()">もう一度スキャン</button>
 
   <script>
     const video = document.getElementById('video');
@@ -34,10 +34,14 @@
     const retryBtn = document.getElementById('retry-btn');
     const staffBadge = document.getElementById('staff-badge');
 
-    // --- ここにMakeのWebhook URLを貼る ---
+    // --- 設定済み：MakeのWebhook URL ---
     const WEBHOOK_URL = 'https://hook.us2.make.com/2latx26ux6bo7bhfvfv3cmxs5i2p7xbh';
-    const STAFF_ID = new URLSearchParams(window.location.search).get('staff') || 'unknown';
-    staffBadge.textContent = 'スタッフID: ' + STAFF_ID;
+    
+    // --- 設定済み：戻り先のアプリ画面URL ---
+    const APP_URL = 'https://96omotesando.glide.page/dl/2f7958';
+
+    const STAFF_ID = new URLSearchParams(window.location.search).get('staff') || 'user_scan';
+    if(STAFF_ID !== 'user_scan') staffBadge.textContent = 'スタッフID: ' + STAFF_ID;
 
     let isScanning = true;
 
@@ -48,6 +52,9 @@
           video.play();
           msg.innerText = 'QRコードをスキャンしてください';
           requestAnimationFrame(tick);
+        })
+        .catch(err => {
+          msg.innerText = 'カメラの起動に失敗しました。設定を確認してください。';
         });
     }
 
@@ -67,24 +74,29 @@
     }
 
     function sendData(userId) {
-      msg.innerText = '判定中...';
-      // GET方式でデータを送る（CORS回避の秘策）
+      msg.innerText = 'スタンプを記録中...';
       const finalUrl = `${WEBHOOK_URL}?userId=${encodeURIComponent(userId)}&staffId=${encodeURIComponent(STAFF_ID)}`;
 
       fetch(finalUrl)
         .then(res => res.json())
         .then(data => {
           if (data.status === 'success') {
-            msg.innerHTML = '✅ 交換OK！<br>景品を渡してください';
+            msg.innerHTML = '✅ 読み込み成功！<br>画面を戻します...';
             msg.className = 'status-success';
+            
+            // 2秒後に元のスタンプ台紙へ強制リダイレクト
+            setTimeout(() => {
+              window.parent.location.href = APP_URL;
+            }, 2000);
+
           } else {
-            msg.innerText = '❌ エラー: ' + (data.message || '不明');
+            msg.innerText = '❌ エラー: ' + (data.message || '不明なエラー');
             msg.className = 'status-error';
+            retryBtn.style.display = 'block';
           }
-          retryBtn.style.display = 'block';
         })
         .catch(err => {
-          msg.innerHTML = '❌ 通信失敗<br>MakeのWebhookResponseを確認してください';
+          msg.innerHTML = '❌ 通信失敗<br>通信環境の良い場所で試してください';
           msg.className = 'status-error';
           retryBtn.style.display = 'block';
         });
