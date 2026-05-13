@@ -3,75 +3,98 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>よさこい2026 スタッフ専用スキャナー</title>
+    <title>よさこい2026 スタッフスキャナー</title>
     <script src="https://unpkg.com/html5-qrcode"></script>
     <style>
-        body { font-family: sans-serif; display: flex; flex-direction: column; align-items: center; background-color: #e9ecef; margin: 0; padding: 20px; }
-        #reader { width: 100%; max-width: 500px; background: white; padding: 10px; border-radius: 8px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
-        #info { margin-top: 20px; padding: 15px; background: white; border-radius: 8px; width: 100%; max-width: 500px; text-align: center; }
-        .staff-info { color: #d32f2f; font-weight: bold; font-size: 1.1em; margin-bottom: 10px; }
-        #result { margin-top: 10px; font-weight: bold; padding: 10px; border-radius: 4px; }
+        * { box-sizing: border-box; }
+        body { font-family: sans-serif; display: flex; flex-direction: column; align-items: center; background-color: #e9ecef; margin: 0; padding: 15px; }
+        #info { margin-bottom: 15px; padding: 15px; background: white; border-radius: 8px; width: 100%; max-width: 500px; text-align: center; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+        .staff-info { color: #d32f2f; font-weight: bold; font-size: 1.1em; margin-bottom: 5px; }
+        
+        /* ★崩れ防止の要：高さを確保する */
+        #reader { 
+            width: 100%; 
+            max-width: 500px; 
+            min-height: 350px; /* カメラ起動前でも場所を確保 */
+            background: #000; 
+            border-radius: 8px; 
+            overflow: hidden;
+            position: relative;
+            border: 3px solid #ccc;
+        }
+
+        #result { margin-top: 15px; font-weight: bold; padding: 12px; border-radius: 4px; width: 100%; max-width: 500px; text-align: center; }
         .success { background-color: #d4edda; color: #155724; }
         .error { background-color: #f8d7da; color: #721c24; }
+        
+        /* カメラ起動ボタン */
+        #start-btn {
+            margin: 20px 0;
+            padding: 12px 24px;
+            font-size: 16px;
+            font-weight: bold;
+            background-color: #d32f2f;
+            color: white;
+            border: none;
+            border-radius: 50px;
+            cursor: pointer;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.2);
+        }
     </style>
 </head>
 <body>
 
-    <h2>【スタッフ用】検印スキャナー</h2>
-
     <div id="info">
         <div id="staff-display" class="staff-info">スタッフ確認中...</div>
-        <div id="result">ユーザーのQRをスキャンしてください</div>
+        <div>ユーザーのQRコードをスキャンしてください</div>
     </div>
+
+    <button id="start-btn">カメラを起動する</button>
 
     <div id="reader"></div>
 
+    <div id="result">ボタンを押してスキャンを開始してください</div>
+
     <script>
-        // --- 設定 ---
-        // ★ Makeの「スタッフ用シナリオ」のWebhook URLをここに貼り付けてください
-        const WEBHOOK_URL = 'https://hook.us1.make.com/xxxxxxxxxxxxxxxxxxxxxxxx'; 
+        const WEBHOOK_URL = 'https://hook.us1.make.com/xxxxxxxxxxxxxxxxxxxxxxxx'; // ★MakeのURLを確認
 
-        // 1. URLパラメータから Glideの指定（?staff=...&email=...）に合わせて取得
         const params = new URLSearchParams(window.location.search);
-        const STAFF_ID = params.get('staff') || ''; // Glideの {Row ID}
-        const STAFF_EMAIL = params.get('email') || ''; // Glideの {Email}
+        const STAFF_ID = params.get('staff') || '';
+        const STAFF_EMAIL = params.get('email') || '';
 
-        // 画面上部にスタッフ情報を表示（デバッグ兼ねる）
         const infoDisplay = document.getElementById('staff-display');
         if (STAFF_EMAIL && STAFF_ID) {
             infoDisplay.innerText = `実行スタッフ: ${STAFF_EMAIL} (${STAFF_ID})`;
         } else {
-            infoDisplay.innerHTML = `<span style="color:red;">スタッフ認証情報がありません</span>`;
+            infoDisplay.innerHTML = `<span style="color:red;">認証情報がありません</span>`;
         }
 
         const html5QrCode = new html5Qrcode("reader");
-        const config = { fps: 10, qrbox: { width: 250, height: 250 } };
+        const config = { fps: 15, qrbox: { width: 250, height: 250 } };
 
         const onScanSuccess = (decodedText) => {
             html5QrCode.stop();
             const resultDisplay = document.getElementById('result');
             resultDisplay.innerText = "データ送信中...";
+            resultDisplay.className = "";
 
-            // 2. Makeへ飛ばす（読み取った相手のID、自分のスタッフID、自分のメール）
-            // Make側では「scannedUserId」「staffId」「staffEmail」という名前で受け取ることになります
             const finalUrl = `${WEBHOOK_URL}?scannedUserId=${encodeURIComponent(decodedText)}&staffId=${encodeURIComponent(STAFF_ID)}&staffEmail=${encodeURIComponent(STAFF_EMAIL)}`;
 
             fetch(finalUrl)
                 .then(response => {
                     if (response.ok) {
-                        resultDisplay.innerText = "スキャン完了！保存されました。";
+                        resultDisplay.innerText = "【成功】保存されました！";
                         resultDisplay.className = "success";
                     } else {
-                        resultDisplay.innerText = "エラー：保存に失敗しました";
+                        resultDisplay.innerText = "【失敗】保存できませんでした";
                         resultDisplay.className = "error";
                     }
                 })
                 .catch(err => {
-                    resultDisplay.innerText = "通信エラーが発生しました";
+                    resultDisplay.innerText = "通信エラー";
                     resultDisplay.className = "error";
                 })
                 .finally(() => {
-                    // 3秒後にスキャナーを再開
                     setTimeout(() => {
                         resultDisplay.innerText = "次のQRをスキャンしてください";
                         resultDisplay.className = "";
@@ -80,10 +103,21 @@
                 });
         };
 
-        html5QrCode.start({ facingMode: "environment" }, config, onScanSuccess)
-            .catch(err => {
-                document.getElementById('result').innerText = "カメラの起動に失敗しました。";
-            });
+        // ボタンを押した時にカメラを起動する
+        document.getElementById('start-btn').addEventListener('click', () => {
+            document.getElementById('start-btn').style.display = 'none'; // ボタンを隠す
+            document.getElementById('result').innerText = "カメラ準備中...";
+            
+            html5QrCode.start({ facingMode: "environment" }, config, onScanSuccess)
+                .then(() => {
+                    document.getElementById('result').innerText = "QRコードを枠内に入れてください";
+                })
+                .catch(err => {
+                    document.getElementById('result').innerText = "カメラ起動エラー: " + err;
+                    document.getElementById('result').className = "error";
+                    document.getElementById('start-btn').style.display = 'block'; // 失敗したらボタン再表示
+                });
+        });
     </script>
 </body>
 </html>
