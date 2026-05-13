@@ -7,53 +7,87 @@
     <script src="https://unpkg.com/html5-qrcode"></script>
     <style>
         * { box-sizing: border-box; }
-        body { font-family: sans-serif; display: flex; flex-direction: column; align-items: center; background-color: #e9ecef; margin: 0; padding: 15px; }
-        #info { margin-bottom: 15px; padding: 15px; background: white; border-radius: 8px; width: 100%; max-width: 500px; text-align: center; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
-        .staff-info { color: #d32f2f; font-weight: bold; font-size: 1.1em; margin-bottom: 5px; }
+        body { 
+            font-family: sans-serif; 
+            display: flex; 
+            flex-direction: column; 
+            align-items: center; 
+            background-color: #e9ecef; 
+            margin: 0; 
+            padding: 0; 
+            height: 100vh; /* 画面いっぱいに使う */
+        }
         
-        /* ★崩れ防止の要：高さを確保する */
+        /* スタッフ情報は上部にコンパクトに表示 */
+        #info { 
+            width: 100%; 
+            padding: 10px; 
+            background: white; 
+            text-align: center; 
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            z-index: 10;
+        }
+        .staff-info { color: #d32f2f; font-weight: bold; font-size: 0.9em; }
+        
+        /* カメラエリア（メイン） */
         #reader { 
             width: 100%; 
             max-width: 500px; 
-            min-height: 350px; /* カメラ起動前でも場所を確保 */
+            flex-grow: 1; /* 画面中央を占領 */
             background: #000; 
-            border-radius: 8px; 
-            overflow: hidden;
-            position: relative;
-            border: 3px solid #ccc;
+            display: flex;
+            align-items: center;
+            justify-content: center;
         }
 
-        #result { margin-top: 15px; font-weight: bold; padding: 12px; border-radius: 4px; width: 100%; max-width: 500px; text-align: center; }
-        .success { background-color: #d4edda; color: #155724; }
-        .error { background-color: #f8d7da; color: #721c24; }
+        /* 操作エリア（下部にまとめる） */
+        .controls {
+            width: 100%;
+            background: white;
+            padding: 20px;
+            border-radius: 20px 20px 0 0; /* 少し丸みをつけて「操作エリア」感を出す */
+            box-shadow: 0 -4px 10px rgba(0,0,0,0.1);
+            text-align: center;
+        }
+
+        #result { 
+            margin-bottom: 15px; 
+            font-weight: bold; 
+            min-height: 1.2em;
+        }
+        .success { color: #155724; }
+        .error { color: #721c24; }
         
-        /* カメラ起動ボタン */
+        /* 押しやすい大きなボタン */
         #start-btn {
-            margin: 20px 0;
-            padding: 12px 24px;
-            font-size: 16px;
+            width: 80%;
+            max-width: 300px;
+            padding: 16px;
+            font-size: 18px;
             font-weight: bold;
             background-color: #d32f2f;
             color: white;
             border: none;
-            border-radius: 50px;
+            border-radius: 12px;
             cursor: pointer;
             box-shadow: 0 4px 6px rgba(0,0,0,0.2);
         }
+        #start-btn:active { transform: translateY(2px); box-shadow: none; }
     </style>
 </head>
 <body>
 
     <div id="info">
         <div id="staff-display" class="staff-info">スタッフ確認中...</div>
-        <div>ユーザーのQRコードをスキャンしてください</div>
+        <div style="font-size: 0.8em; color: #666;">検印スキャナー</div>
     </div>
-
-    <button id="start-btn">カメラを起動する</button>
 
     <div id="reader"></div>
 
-    <div id="result">ボタンを押してスキャンを開始してください</div>
+    <div class="controls">
+        <div id="result">下のボタンを押して開始</div>
+        <button id="start-btn">スキャンを開始する</button>
+    </div>
 
     <script>
         const WEBHOOK_URL = 'https://hook.us1.make.com/xxxxxxxxxxxxxxxxxxxxxxxx'; // ★MakeのURLを確認
@@ -75,7 +109,7 @@
         const onScanSuccess = (decodedText) => {
             html5QrCode.stop();
             const resultDisplay = document.getElementById('result');
-            resultDisplay.innerText = "データ送信中...";
+            resultDisplay.innerText = "送信中...";
             resultDisplay.className = "";
 
             const finalUrl = `${WEBHOOK_URL}?scannedUserId=${encodeURIComponent(decodedText)}&staffId=${encodeURIComponent(STAFF_ID)}&staffEmail=${encodeURIComponent(STAFF_EMAIL)}`;
@@ -83,10 +117,10 @@
             fetch(finalUrl)
                 .then(response => {
                     if (response.ok) {
-                        resultDisplay.innerText = "【成功】保存されました！";
+                        resultDisplay.innerText = "【成功】保存しました";
                         resultDisplay.className = "success";
                     } else {
-                        resultDisplay.innerText = "【失敗】保存できませんでした";
+                        resultDisplay.innerText = "【失敗】保存エラー";
                         resultDisplay.className = "error";
                     }
                 })
@@ -96,26 +130,25 @@
                 })
                 .finally(() => {
                     setTimeout(() => {
-                        resultDisplay.innerText = "次のQRをスキャンしてください";
+                        resultDisplay.innerText = "次のQRをどうぞ";
                         resultDisplay.className = "";
                         html5QrCode.start({ facingMode: "environment" }, config, onScanSuccess);
-                    }, 3000);
+                    }, 2500);
                 });
         };
 
-        // ボタンを押した時にカメラを起動する
         document.getElementById('start-btn').addEventListener('click', () => {
-            document.getElementById('start-btn').style.display = 'none'; // ボタンを隠す
+            document.getElementById('start-btn').style.display = 'none';
             document.getElementById('result').innerText = "カメラ準備中...";
             
             html5QrCode.start({ facingMode: "environment" }, config, onScanSuccess)
                 .then(() => {
-                    document.getElementById('result').innerText = "QRコードを枠内に入れてください";
+                    document.getElementById('result').innerText = "枠内にQRを入れてください";
                 })
                 .catch(err => {
-                    document.getElementById('result').innerText = "カメラ起動エラー: " + err;
+                    document.getElementById('result').innerText = "エラー: " + err;
                     document.getElementById('result').className = "error";
-                    document.getElementById('start-btn').style.display = 'block'; // 失敗したらボタン再表示
+                    document.getElementById('start-btn').style.display = 'inline-block';
                 });
         });
     </script>
