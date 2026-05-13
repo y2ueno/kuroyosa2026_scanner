@@ -28,14 +28,15 @@
 
     <script>
         // --- 設定 ---
-        const WEBHOOK_URL = 'https://hook.us1.make.com/xxxxxxxxxxxxxxxxxxxxxxxx'; // ★スタッフ用WebhookのURL
+        // ★ Makeの「スタッフ用シナリオ」のWebhook URLをここに貼り付けてください
+        const WEBHOOK_URL = 'https://hook.us1.make.com/xxxxxxxxxxxxxxxxxxxxxxxx'; 
 
-        // 1. URLからスタッフ自身のIDとメールを取得
+        // 1. URLパラメータから Glideの指定（?staff=...&email=...）に合わせて取得
         const params = new URLSearchParams(window.location.search);
-        const STAFF_ID = params.get('staff_id') || ''; 
-        const STAFF_EMAIL = params.get('email') || '';
+        const STAFF_ID = params.get('staff') || ''; // Glideの {Row ID}
+        const STAFF_EMAIL = params.get('email') || ''; // Glideの {Email}
 
-        // 画面表示
+        // 画面上部にスタッフ情報を表示（デバッグ兼ねる）
         const infoDisplay = document.getElementById('staff-display');
         if (STAFF_EMAIL && STAFF_ID) {
             infoDisplay.innerText = `実行スタッフ: ${STAFF_EMAIL} (${STAFF_ID})`;
@@ -51,13 +52,14 @@
             const resultDisplay = document.getElementById('result');
             resultDisplay.innerText = "データ送信中...";
 
-            // 2. Makeへ飛ばす（スタッフID、スキャンした相手のID、スタッフメール）
+            // 2. Makeへ飛ばす（読み取った相手のID、自分のスタッフID、自分のメール）
+            // Make側では「scannedUserId」「staffId」「staffEmail」という名前で受け取ることになります
             const finalUrl = `${WEBHOOK_URL}?scannedUserId=${encodeURIComponent(decodedText)}&staffId=${encodeURIComponent(STAFF_ID)}&staffEmail=${encodeURIComponent(STAFF_EMAIL)}`;
 
             fetch(finalUrl)
                 .then(response => {
                     if (response.ok) {
-                        resultDisplay.innerText = "スキャン完了！";
+                        resultDisplay.innerText = "スキャン完了！保存されました。";
                         resultDisplay.className = "success";
                     } else {
                         resultDisplay.innerText = "エラー：保存に失敗しました";
@@ -65,10 +67,11 @@
                     }
                 })
                 .catch(err => {
-                    resultDisplay.innerText = "通信エラー";
+                    resultDisplay.innerText = "通信エラーが発生しました";
                     resultDisplay.className = "error";
                 })
                 .finally(() => {
+                    // 3秒後にスキャナーを再開
                     setTimeout(() => {
                         resultDisplay.innerText = "次のQRをスキャンしてください";
                         resultDisplay.className = "";
@@ -77,7 +80,10 @@
                 });
         };
 
-        html5QrCode.start({ facingMode: "environment" }, config, onScanSuccess);
+        html5QrCode.start({ facingMode: "environment" }, config, onScanSuccess)
+            .catch(err => {
+                document.getElementById('result').innerText = "カメラの起動に失敗しました。";
+            });
     </script>
 </body>
 </html>
