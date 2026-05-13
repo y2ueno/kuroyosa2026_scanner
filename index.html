@@ -2,102 +2,64 @@
 <html lang="ja">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>スタッフスキャナー</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>スタッフスキャナー（復旧版）</title>
     <script src="https://unpkg.com/html5-qrcode"></script>
     <style>
-        * { box-sizing: border-box; }
-        body { font-family: sans-serif; margin: 0; padding: 0; background: #e9ecef; display: flex; flex-direction: column; height: 100vh; overflow: hidden; }
-        
-        #info { padding: 15px; background: white; text-align: center; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
-        .staff-info { color: #d32f2f; font-weight: bold; font-size: 1.1em; }
-        
-        /* カメラエリア：画面の中央をしっかり確保 */
-        #reader { width: 100%; flex: 1; background: #000; position: relative; }
-
-        /* 操作エリア：画面下部に固定（親指が届く位置） */
-        .controls { padding: 20px; background: white; text-align: center; border-radius: 20px 20px 0 0; }
-        #result { margin-bottom: 10px; font-weight: bold; font-size: 0.9em; min-height: 1.5em; }
-        .success { color: #155724; }
-        .error { color: #721c24; }
-        
-        #start-btn { width: 100%; max-width: 300px; padding: 18px; font-size: 18px; font-weight: bold; background: #d32f2f; color: white; border: none; border-radius: 12px; cursor: pointer; }
+        body { font-family: sans-serif; text-align: center; margin: 0; padding: 10px; background: #eee; }
+        /* 余計な装飾を削ぎ落とし、カメラが見えることを最優先 */
+        #reader { width: 100%; max-width: 500px; margin: 10px auto; background: white; }
+        .info { padding: 10px; background: white; margin-bottom: 10px; font-size: 0.9em; }
+        #result { margin-top: 10px; font-weight: bold; }
     </style>
 </head>
 <body>
 
-    <div id="info">
-        <div id="staff-display" class="staff-info">スタッフ確認中...</div>
-        <div style="font-size: 0.8em; color: #666; margin-top: 5px;">検印スキャナー</div>
+    <div class="info">
+        <div id="staff-display">スタッフ確認中...</div>
     </div>
 
     <div id="reader"></div>
-
-    <div class="controls">
-        <div id="result">スキャンを開始してください</div>
-        <button id="start-btn">カメラを起動する</button>
-    </div>
+    <div id="result">QRコードをスキャンしてください</div>
 
     <script>
-        const WEBHOOK_URL = 'https://hook.us1.make.com/xxxxxxxxxxxxxxxxxxxxxxxx'; // ★MakeのURLを確認
+        const WEBHOOK_URL = 'https://hook.us1.make.com/xxxxxxxxxxxxxxxxxxxxxxxx';
 
+        // 1. パラメータ取得（ここは今完成した「staff」と「email」を使う）
         const params = new URLSearchParams(window.location.search);
-        // どちらの名前できてもいいように両方チェックする（保険）
-        const STAFF_ID = params.get('staff') || params.get('staff_id') || '';
+        const STAFF_ID = params.get('staff') || '';
         const STAFF_EMAIL = params.get('email') || '';
 
         const infoDisplay = document.getElementById('staff-display');
-        const resultDisplay = document.getElementById('result');
-
         if (STAFF_EMAIL && STAFF_ID) {
-            infoDisplay.innerText = `実行スタッフ: ${STAFF_EMAIL} (${STAFF_ID})`;
+            infoDisplay.innerText = `スタッフ: ${STAFF_EMAIL} (${STAFF_ID})`;
         } else {
-            // 何が足りないのか具体的に出す（デバッグ用）
-            let missing = !STAFF_ID ? 'ID未取得' : 'Email未取得';
-            infoDisplay.innerHTML = `<span style="color:red;">認証失敗 (${missing})</span>`;
-            resultDisplay.innerHTML = `<span style="color:gray; font-size:0.8em;">URL: ${window.location.search}</span>`;
+            infoDisplay.innerHTML = `<span style="color:red;">認証情報なし</span>`;
         }
 
+        // 2. 24時間前の「一番シンプルだった起動方法」に戻す
         const html5QrCode = new html5Qrcode("reader");
-        const config = { fps: 15, qrbox: { width: 250, height: 250 } };
+        
+        // ページ読み込みと同時に開始
+        html5QrCode.start(
+            { facingMode: "environment" }, 
+            { fps: 10, qrbox: { width: 250, height: 250 } },
+            (decodedText) => {
+                // スキャン成功時
+                html5QrCode.stop();
+                document.getElementById('result').innerText = "送信中...";
 
-        const onScanSuccess = (decodedText) => {
-            html5QrCode.stop();
-            resultDisplay.innerText = "送信中...";
-            resultDisplay.className = "";
+                const finalUrl = `${WEBHOOK_URL}?scannedUserId=${encodeURIComponent(decodedText)}&staffId=${encodeURIComponent(STAFF_ID)}&staffEmail=${encodeURIComponent(STAFF_EMAIL)}`;
 
-            const finalUrl = `${WEBHOOK_URL}?scannedUserId=${encodeURIComponent(decodedText)}&staffId=${encodeURIComponent(STAFF_ID)}&staffEmail=${encodeURIComponent(STAFF_EMAIL)}`;
-
-            fetch(finalUrl)
-                .then(response => {
+                fetch(finalUrl).then(response => {
                     if (response.ok) {
-                        resultDisplay.innerText = "【成功】保存されました";
-                        resultDisplay.className = "success";
-                    } else {
-                        resultDisplay.innerText = "【失敗】サーバーエラー";
-                        resultDisplay.className = "error";
+                        document.getElementById('result').innerText = "成功：保存されました";
+                        setTimeout(() => location.reload(), 2000); // 成功したらリロードして再待機
                     }
-                })
-                .catch(err => {
-                    resultDisplay.innerText = "通信エラー";
-                    resultDisplay.className = "error";
-                })
-                .finally(() => {
-                    setTimeout(() => {
-                        resultDisplay.innerText = "次のQRをどうぞ";
-                        resultDisplay.className = "";
-                        html5QrCode.start({ facingMode: "environment" }, config, onScanSuccess);
-                    }, 2500);
                 });
-        };
-
-        document.getElementById('start-btn').addEventListener('click', () => {
-            document.getElementById('start-btn').style.display = 'none';
-            html5QrCode.start({ facingMode: "environment" }, config, onScanSuccess)
-                .catch(err => {
-                    resultDisplay.innerText = "カメラ起動エラー: " + err;
-                    document.getElementById('start-btn').style.display = 'block';
-                });
+            }
+        ).catch(err => {
+            document.getElementById('result').innerText = "カメラ起動エラー: " + err;
         });
     </script>
 </body>
