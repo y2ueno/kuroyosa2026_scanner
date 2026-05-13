@@ -7,173 +7,98 @@
   <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js"></script>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
-    body {
-      text-align: center;
-      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-      background: #f0f2f5;
-      padding: 20px;
-      color: #333;
-      min-height: 100dvh;
-    }
-    h1 { font-size: 1.2rem; margin-bottom: 4px; color: #1a73e8; }
-    #staff-badge {
-      display: inline-block;
-      margin-bottom: 16px;
-      padding: 3px 12px;
-      border-radius: 999px;
-      font-size: 12px;
-      font-weight: bold;
-      background: #e8f0fe;
-      color: #1a73e8;
-      border: 1px solid #c5d0f9;
-    }
-    #wrapper {
-      position: relative;
-      width: 100%;
-      max-width: 400px;
-      margin: 0 auto;
-      aspect-ratio: 1 / 1;
-      border-radius: 24px;
-      overflow: hidden;
-      background: #000;
-      box-shadow: 0 10px 25px rgba(0,0,0,0.2);
-      border: 4px solid #fff;
-    }
-    #video { width: 100%; height: 100%; object-fit: cover; }
-    #canvas { display: none; }
-    #msg {
-      margin-top: 20px;
-      padding: 20px;
-      border-radius: 16px;
-      font-size: 1.1rem;
-      font-weight: bold;
-      line-height: 1.5;
-      min-height: 100px;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      justify-content: center;
-      background: #fff;
-      box-shadow: 0 4px 12px rgba(0,0,0,0.05);
-    }
-    .status-info { color: #666; background: #fff !important; }
-    .status-success { color: #fff; background: #34a853 !important; }
-    .status-already { color: #fff; background: #fbbc05 !important; }
-    .status-lack { color: #fff; background: #ea4335 !important; }
-    .status-error { color: #fff; background: #70757a !important; }
-    .prize-badge {
-      display: block;
-      font-size: 2rem;
-      margin-bottom: 8px;
-    }
-    .loading-spinner {
-      width: 30px;
-      height: 30px;
-      border: 4px solid #f3f3f3;
-      border-top: 4px solid #1a73e8;
-      border-radius: 50%;
-      animation: spin 1s linear infinite;
-      margin-bottom: 10px;
-    }
-    @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+    body { text-align: center; font-family: sans-serif; background: #f0f2f5; padding: 20px; }
+    #wrapper { position: relative; width: 100%; max-width: 360px; margin: 0 auto; aspect-ratio: 1/1; overflow: hidden; border-radius: 20px; background: #000; border: 4px solid #fff; }
+    #canvas { width: 100%; height: 100%; object-fit: cover; }
+    #msg { margin-top: 20px; padding: 20px; border-radius: 14px; font-weight: bold; background: #fff; min-height: 100px; display: flex; align-items: center; justify-content: center; }
+    .status-success { background: #e6f4ea !important; color: #1e8e3e; border: 2px solid #34a853; }
+    .status-error { background: #fce8e6 !important; color: #d93025; border: 2px solid #ea4335; }
+    #retry-btn { display: none; margin: 20px auto; padding: 12px 30px; border-radius: 999px; background: #1a73e8; color: #fff; border: none; font-weight: bold; }
   </style>
 </head>
 <body>
-
   <h1>景品交換スキャナー</h1>
-  <div id="staff-badge">STAFF ID: <span id="display-staff-id">---</span></div>
-
+  <div id="staff-badge" style="margin: 10px 0;">読み込み中...</div>
   <div id="wrapper">
-    <video id="video" playsinline></video>
+    <video id="video" style="display:none" playsinline></video>
     <canvas id="canvas"></canvas>
   </div>
-
-  <div id="msg" class="status-info">
-    QRコードをスキャンしてください
-  </div>
+  <div id="msg">カメラ起動中...</div>
+  <button id="retry-btn" onclick="resetScanner()">次の人をスキャン</button>
 
   <script>
-    // --- 設定：MakeのWebhook URLに差し替え ---
-    const scriptUrl = 'https://hook.us2.make.com/2latx26ux6bo7bhfvfv3cmxs5i2p7xbh';
-
     const video = document.getElementById('video');
     const canvas = document.getElementById('canvas');
     const ctx = canvas.getContext('2d');
     const msg = document.getElementById('msg');
-    const displayStaffId = document.getElementById('display-staff-id');
+    const retryBtn = document.getElementById('retry-btn');
+    const staffBadge = document.getElementById('staff-badge');
 
-    // URLパラメータから staffId を取得
-    const params = new URLSearchParams(window.location.search);
-    const staffId = params.get('staffId') || 'unknown';
-    displayStaffId.innerText = staffId;
+    // --- ここにMakeのWebhook URLを貼る ---
+    const WEBHOOK_URL = 'https://hook.us2.make.com/2latx26ux6bo7bhfvfv3cmxs5i2p7xbh';
+    const STAFF_ID = new URLSearchParams(window.location.search).get('staff') || 'unknown';
+    staffBadge.textContent = 'スタッフID: ' + STAFF_ID;
 
     let isScanning = true;
 
-    async function initCamera() {
-      try {
-        const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
-        video.srcObject = stream;
-        video.play();
-        requestAnimationFrame(tick);
-      } catch (err) {
-        msg.innerText = "カメラの起動に失敗しました。ブラウザの設定を確認してください。";
-        msg.className = "status-error";
-      }
+    function startCamera() {
+      navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } })
+        .then(stream => {
+          video.srcObject = stream;
+          video.play();
+          msg.innerText = 'QRコードをスキャンしてください';
+          requestAnimationFrame(tick);
+        });
     }
 
     function tick() {
-      if (!isScanning) return;
-      if (video.readyState === video.HAVE_ENOUGH_DATA) {
+      if (video.readyState === video.HAVE_ENOUGH_DATA && isScanning) {
         canvas.height = video.videoHeight;
         canvas.width = video.videoWidth;
         ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
         const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-        const code = jsQR(imageData.data, imageData.width, imageData.height, { inversionAttempts: "dontInvert" });
-
+        const code = jsQR(imageData.data, imageData.width, imageData.height);
         if (code) {
           isScanning = false;
-          handleExchange(code.data);
+          sendData(code.data);
         }
       }
+      if (isScanning) requestAnimationFrame(tick);
+    }
+
+    function sendData(userId) {
+      msg.innerText = '判定中...';
+      // GET方式でデータを送る（CORS回避の秘策）
+      const finalUrl = `${WEBHOOK_URL}?userId=${encodeURIComponent(userId)}&staffId=${encodeURIComponent(STAFF_ID)}`;
+
+      fetch(finalUrl)
+        .then(res => res.json())
+        .then(data => {
+          if (data.status === 'success') {
+            msg.innerHTML = '✅ 交換OK！<br>景品を渡してください';
+            msg.className = 'status-success';
+          } else {
+            msg.innerText = '❌ エラー: ' + (data.message || '不明');
+            msg.className = 'status-error';
+          }
+          retryBtn.style.display = 'block';
+        })
+        .catch(err => {
+          msg.innerHTML = '❌ 通信失敗<br>MakeのWebhookResponseを確認してください';
+          msg.className = 'status-error';
+          retryBtn.style.display = 'block';
+        });
+    }
+
+    function resetScanner() {
+      isScanning = true;
+      retryBtn.style.display = 'none';
+      msg.innerText = 'QRコードをスキャンしてください';
+      msg.className = '';
       requestAnimationFrame(tick);
     }
 
-    async function handleExchange(userId) {
-      msg.innerHTML = '<div class="loading-spinner"></div>照会中...';
-      msg.className = 'status-info';
-
-      try {
-        // MakeのWebhookへデータを送信
-        const response = await fetch(`${scriptUrl}?userId=${userId}&staffId=${staffId}`);
-        
-        if (!response.ok) throw new Error("通信エラー");
-
-        const data = await response.json();
-
-        if (data.status === 'success') {
-          msg.innerHTML = `✅ 交換完了！<br><span style="font-size:1.5rem">景品をお渡しください</span><br><small>ユーザー: ${userId}</small>`;
-          msg.className = 'status-success';
-        } else if (data.status === 'already_exchanged') {
-          msg.innerHTML = `⚠️ 交換済み<br>この方はすでに景品を受け取っています`;
-          msg.className = 'status-already';
-        } else {
-          msg.innerHTML = `❌ エラー<br>${data.message || '不明なエラー'}`;
-          msg.className = 'status-error';
-        }
-      } catch (err) {
-        msg.innerHTML = `❌ 通信失敗<br>ネットワークを確認してください`;
-        msg.className = 'status-error';
-      }
-
-      // 5秒後にスキャン再開
-      setTimeout(() => {
-        msg.innerText = "QRコードをスキャンしてください";
-        msg.className = "status-info";
-        isScanning = true;
-      }, 5000);
-    }
-
-    initCamera();
+    startCamera();
   </script>
 </body>
 </html>
