@@ -2,105 +2,60 @@
 <html lang="ja">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>よさこい2026 スタッフスキャナー</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>スタッフスキャナー</title>
     <script src="https://unpkg.com/html5-qrcode"></script>
     <style>
         * { box-sizing: border-box; }
-        body { 
-            font-family: sans-serif; 
-            display: flex; 
-            flex-direction: column; 
-            align-items: center; 
-            background-color: #e9ecef; 
-            margin: 0; 
-            padding: 0; 
-            height: 100vh; /* 画面いっぱいに使う */
-        }
+        body { font-family: sans-serif; margin: 0; padding: 0; background: #e9ecef; display: flex; flex-direction: column; height: 100vh; overflow: hidden; }
         
-        /* スタッフ情報は上部にコンパクトに表示 */
-        #info { 
-            width: 100%; 
-            padding: 10px; 
-            background: white; 
-            text-align: center; 
-            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-            z-index: 10;
-        }
-        .staff-info { color: #d32f2f; font-weight: bold; font-size: 0.9em; }
+        #info { padding: 15px; background: white; text-align: center; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+        .staff-info { color: #d32f2f; font-weight: bold; font-size: 1.1em; }
         
-        /* カメラエリア（メイン） */
-        #reader { 
-            width: 100%; 
-            max-width: 500px; 
-            flex-grow: 1; /* 画面中央を占領 */
-            background: #000; 
-            display: flex;
-            align-items: center;
-            justify-content: center;
-        }
+        /* カメラエリア：画面の中央をしっかり確保 */
+        #reader { width: 100%; flex: 1; background: #000; position: relative; }
 
-        /* 操作エリア（下部にまとめる） */
-        .controls {
-            width: 100%;
-            background: white;
-            padding: 20px;
-            border-radius: 20px 20px 0 0; /* 少し丸みをつけて「操作エリア」感を出す */
-            box-shadow: 0 -4px 10px rgba(0,0,0,0.1);
-            text-align: center;
-        }
-
-        #result { 
-            margin-bottom: 15px; 
-            font-weight: bold; 
-            min-height: 1.2em;
-        }
+        /* 操作エリア：画面下部に固定（親指が届く位置） */
+        .controls { padding: 20px; background: white; text-align: center; border-radius: 20px 20px 0 0; }
+        #result { margin-bottom: 10px; font-weight: bold; font-size: 0.9em; min-height: 1.5em; }
         .success { color: #155724; }
         .error { color: #721c24; }
         
-        /* 押しやすい大きなボタン */
-        #start-btn {
-            width: 80%;
-            max-width: 300px;
-            padding: 16px;
-            font-size: 18px;
-            font-weight: bold;
-            background-color: #d32f2f;
-            color: white;
-            border: none;
-            border-radius: 12px;
-            cursor: pointer;
-            box-shadow: 0 4px 6px rgba(0,0,0,0.2);
-        }
-        #start-btn:active { transform: translateY(2px); box-shadow: none; }
+        #start-btn { width: 100%; max-width: 300px; padding: 18px; font-size: 18px; font-weight: bold; background: #d32f2f; color: white; border: none; border-radius: 12px; cursor: pointer; }
     </style>
 </head>
 <body>
 
     <div id="info">
         <div id="staff-display" class="staff-info">スタッフ確認中...</div>
-        <div style="font-size: 0.8em; color: #666;">検印スキャナー</div>
+        <div style="font-size: 0.8em; color: #666; margin-top: 5px;">検印スキャナー</div>
     </div>
 
     <div id="reader"></div>
 
     <div class="controls">
-        <div id="result">下のボタンを押して開始</div>
-        <button id="start-btn">スキャンを開始する</button>
+        <div id="result">スキャンを開始してください</div>
+        <button id="start-btn">カメラを起動する</button>
     </div>
 
     <script>
         const WEBHOOK_URL = 'https://hook.us1.make.com/xxxxxxxxxxxxxxxxxxxxxxxx'; // ★MakeのURLを確認
 
         const params = new URLSearchParams(window.location.search);
-        const STAFF_ID = params.get('staff') || '';
+        // どちらの名前できてもいいように両方チェックする（保険）
+        const STAFF_ID = params.get('staff') || params.get('staff_id') || '';
         const STAFF_EMAIL = params.get('email') || '';
 
         const infoDisplay = document.getElementById('staff-display');
+        const resultDisplay = document.getElementById('result');
+
         if (STAFF_EMAIL && STAFF_ID) {
             infoDisplay.innerText = `実行スタッフ: ${STAFF_EMAIL} (${STAFF_ID})`;
         } else {
-            infoDisplay.innerHTML = `<span style="color:red;">認証情報がありません</span>`;
+            // 何が足りないのか具体的に出す（デバッグ用）
+            let missing = !STAFF_ID ? 'ID未取得' : 'Email未取得';
+            infoDisplay.innerHTML = `<span style="color:red;">認証失敗 (${missing})</span>`;
+            resultDisplay.innerHTML = `<span style="color:gray; font-size:0.8em;">URL: ${window.location.search}</span>`;
         }
 
         const html5QrCode = new html5Qrcode("reader");
@@ -108,7 +63,6 @@
 
         const onScanSuccess = (decodedText) => {
             html5QrCode.stop();
-            const resultDisplay = document.getElementById('result');
             resultDisplay.innerText = "送信中...";
             resultDisplay.className = "";
 
@@ -117,10 +71,10 @@
             fetch(finalUrl)
                 .then(response => {
                     if (response.ok) {
-                        resultDisplay.innerText = "【成功】保存しました";
+                        resultDisplay.innerText = "【成功】保存されました";
                         resultDisplay.className = "success";
                     } else {
-                        resultDisplay.innerText = "【失敗】保存エラー";
+                        resultDisplay.innerText = "【失敗】サーバーエラー";
                         resultDisplay.className = "error";
                     }
                 })
@@ -139,16 +93,10 @@
 
         document.getElementById('start-btn').addEventListener('click', () => {
             document.getElementById('start-btn').style.display = 'none';
-            document.getElementById('result').innerText = "カメラ準備中...";
-            
             html5QrCode.start({ facingMode: "environment" }, config, onScanSuccess)
-                .then(() => {
-                    document.getElementById('result').innerText = "枠内にQRを入れてください";
-                })
                 .catch(err => {
-                    document.getElementById('result').innerText = "エラー: " + err;
-                    document.getElementById('result').className = "error";
-                    document.getElementById('start-btn').style.display = 'inline-block';
+                    resultDisplay.innerText = "カメラ起動エラー: " + err;
+                    document.getElementById('start-btn').style.display = 'block';
                 });
         });
     </script>
