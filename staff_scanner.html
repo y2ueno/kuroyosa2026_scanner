@@ -25,217 +25,155 @@
       font-weight: bold;
       background: #e8f0fe;
       color: #1a73e8;
-      border: 1px solid #c5d0f5;
-    }
-    #staff-badge.unknown {
-      background: #fce8e6;
-      color: #d93025;
-      border-color: #f5c5c2;
+      border: 1px solid #c5d0f9;
     }
     #wrapper {
       position: relative;
       width: 100%;
-      max-width: 360px;
+      max-width: 400px;
       margin: 0 auto;
       aspect-ratio: 1 / 1;
+      border-radius: 24px;
       overflow: hidden;
-      border-radius: 20px;
       background: #000;
+      box-shadow: 0 10px 25px rgba(0,0,0,0.2);
       border: 4px solid #fff;
-      box-shadow: 0 8px 20px rgba(0,0,0,0.15);
     }
-    #canvas { width: 100%; height: 100%; object-fit: cover; }
-    #scan-line {
-      position: absolute;
-      left: 10%; width: 80%; height: 2px;
-      background: rgba(26,115,232,0.7);
-      animation: scan 2s linear infinite;
-      pointer-events: none;
-    }
-    @keyframes scan { 0% { top: 10%; } 100% { top: 90%; } }
+    #video { width: 100%; height: 100%; object-fit: cover; }
+    #canvas { display: none; }
     #msg {
       margin-top: 20px;
-      padding: 16px;
-      border-radius: 14px;
-      font-size: 16px;
+      padding: 20px;
+      border-radius: 16px;
+      font-size: 1.1rem;
       font-weight: bold;
-      line-height: 1.6;
+      line-height: 1.5;
+      min-height: 100px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
       background: #fff;
-      box-shadow: 0 2px 8px rgba(0,0,0,0.08);
-      max-width: 360px;
-      margin-left: auto;
-      margin-right: auto;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.05);
     }
-    .status-wait    { color: #5f6368; }
-    .status-sending { color: #e67e22; animation: blink 0.8s infinite; }
-    .status-success { color: #188038; background: #e6f4ea !important; border: 2px solid #34a853; }
-    .status-error   { color: #d93025; background: #fce8e6 !important; border: 2px solid #ea4335; }
-    .status-already { color: #7b1fa2; background: #f3e5f5 !important; border: 2px solid #ab47bc; }
-    .status-lack    { color: #e65100; background: #fff3e0 !important; border: 2px solid #fb8c00; }
-    @keyframes blink { 0%,100% { opacity: 1; } 50% { opacity: 0.4; } }
+    .status-info { color: #666; background: #fff !important; }
+    .status-success { color: #fff; background: #34a853 !important; }
+    .status-already { color: #fff; background: #fbbc05 !important; }
+    .status-lack { color: #fff; background: #ea4335 !important; }
+    .status-error { color: #fff; background: #70757a !important; }
     .prize-badge {
-      display: inline-block;
-      margin-top: 8px;
-      padding: 4px 16px;
-      border-radius: 999px;
-      font-size: 1.4rem;
-      font-weight: 900;
-      letter-spacing: 2px;
+      display: block;
+      font-size: 2rem;
+      margin-bottom: 8px;
     }
-    .prize-p1 { background: #fffde7; color: #f57f17; border: 2px solid #fdd835; }
-    .prize-p2 { background: #e8f5e9; color: #1b5e20; border: 2px solid #43a047; }
-    #retry-btn {
-      display: none;
-      margin: 16px auto 0;
-      padding: 12px 32px;
-      border-radius: 999px;
-      background: #1a73e8;
-      color: #fff;
-      font-size: 1rem;
-      font-weight: bold;
-      border: none;
-      cursor: pointer;
-      box-shadow: 0 2px 6px rgba(26,115,232,0.3);
+    .loading-spinner {
+      width: 30px;
+      height: 30px;
+      border: 4px solid #f3f3f3;
+      border-top: 4px solid #1a73e8;
+      border-radius: 50%;
+      animation: spin 1s linear infinite;
+      margin-bottom: 10px;
     }
-    #retry-btn:active { background: #0d47a1; }
-    .hint { font-size: 12px; color: #777; margin-top: 12px; }
+    @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
   </style>
 </head>
 <body>
-  <h1>🎁 景品交換スキャナー</h1>
-  <div id="staff-badge">読み込み中...</div>
+
+  <h1>景品交換スキャナー</h1>
+  <div id="staff-badge">STAFF ID: <span id="display-staff-id">---</span></div>
 
   <div id="wrapper">
-    <video id="video" style="display:none" playsinline></video>
+    <video id="video" playsinline></video>
     <canvas id="canvas"></canvas>
-    <div id="scan-line"></div>
   </div>
 
-  <div id="msg" class="status-wait">カメラの起動を準備中...</div>
-  <button id="retry-btn" onclick="resetScanner()">次の人をスキャン</button>
-  <p class="hint">※カメラの利用許可を求めるポップアップが出たら「許可」をタップしてください</p>
+  <div id="msg" class="status-info">
+    QRコードをスキャンしてください
+  </div>
 
   <script>
+    // --- 設定：MakeのWebhook URLに差し替え ---
+    const scriptUrl = 'https://hook.us2.make.com/2latx26ux6bo7bhfvfv3cmxs5i2p7xbh';
+
     const video = document.getElementById('video');
     const canvas = document.getElementById('canvas');
     const ctx = canvas.getContext('2d');
     const msg = document.getElementById('msg');
-    const retryBtn = document.getElementById('retry-btn');
-    const scanLine = document.getElementById('scan-line');
-    const staffBadge = document.getElementById('staff-badge');
+    const displayStaffId = document.getElementById('display-staff-id');
 
-    const GAS_URL = 'https://script.google.com/macros/s/AKfycbwPTNdb1Y94X1L1-AM6bykD0gnNbHvoxqycEAs8XTSQPujLsl6ZRvUla0042zeUyG-5/exec';
-    const STAFF_ID = new URLSearchParams(window.location.search).get('staff') || '';
-    const PRIZE = 'よさこい2026_3箇所賞';
-
-    if (STAFF_ID) {
-      staffBadge.textContent = 'スタッフ：' + STAFF_ID;
-    } else {
-      staffBadge.textContent = '⚠️ スタッフID未設定';
-      staffBadge.classList.add('unknown');
-    }
+    // URLパラメータから staffId を取得
+    const params = new URLSearchParams(window.location.search);
+    const staffId = params.get('staffId') || 'unknown';
+    displayStaffId.innerText = staffId;
 
     let isScanning = true;
-    let scanLocked = false;
 
-    function startCamera() {
-      navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } })
-        .then(stream => {
-          video.srcObject = stream;
-          video.play();
-          msg.innerText = 'QRコードを枠内に収めてください';
-          msg.className = 'status-wait';
-          requestAnimationFrame(tick);
-        })
-        .catch(() => {
-          msg.innerHTML = '【エラー】カメラを起動できません<br>ブラウザの設定でカメラ権限を許可してください';
-          msg.className = 'status-error';
-        });
+    async function initCamera() {
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
+        video.srcObject = stream;
+        video.play();
+        requestAnimationFrame(tick);
+      } catch (err) {
+        msg.innerText = "カメラの起動に失敗しました。ブラウザの設定を確認してください。";
+        msg.className = "status-error";
+      }
     }
 
     function tick() {
-      if (video.readyState === video.HAVE_ENOUGH_DATA && isScanning && !scanLocked) {
+      if (!isScanning) return;
+      if (video.readyState === video.HAVE_ENOUGH_DATA) {
         canvas.height = video.videoHeight;
         canvas.width = video.videoWidth;
         ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
         const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-        const code = jsQR(imageData.data, imageData.width, imageData.height);
+        const code = jsQR(imageData.data, imageData.width, imageData.height, { inversionAttempts: "dontInvert" });
+
         if (code) {
-          scanLocked = true;
           isScanning = false;
-          scanLine.style.display = 'none';
-          sendData(code.data);
+          handleExchange(code.data);
         }
       }
-      if (isScanning) requestAnimationFrame(tick);
-    }
-
-    function sendData(userId) {
-      msg.innerText = '判定中...';
-      msg.className = 'status-sending';
-
-      const payload = {
-        userId: userId,
-        staffId: STAFF_ID,
-        prize: PRIZE,
-        exchanged_at: new Date().toISOString()
-      };
-
-      fetch(GAS_URL, {
-        method: 'POST',
-        headers: { 'Content-Type': 'text/plain' },
-        body: JSON.stringify(payload)
-      })
-        .then(res => res.json())
-        .then(data => handleResult(data, userId))
-        .catch(() => {
-          return fetch(`${GAS_URL}?userId=${encodeURIComponent(userId)}&staffId=${encodeURIComponent(STAFF_ID)}&prize=${encodeURIComponent(PRIZE)}&exchanged_at=${encodeURIComponent(new Date().toISOString())}`)
-            .then(res => res.json())
-            .then(data => handleResult(data, userId))
-            .catch(() => {
-              msg.innerHTML = '通信エラーが発生しました<br>再度スキャンしてください';
-              msg.className = 'status-error';
-              retryBtn.style.display = 'block';
-            });
-        });
-    }
-
-    function handleResult(data, userId) {
-      if (navigator.vibrate) navigator.vibrate(200);
-
-      if (data.status === 'success') {
-        const completeMsg = data.complete_entry
-          ? '<br><small style="color:#1a73e8;font-weight:normal;">🏆 コンプリート賞にもエントリー済みです</small>'
-          : '';
-        msg.innerHTML = `✅ 3ヵ所賞 交換OK！<br><span class="prize-badge prize-p1">3ヵ所賞</span><br>景品をお渡しください<br><small style="font-weight:normal;color:#555;">スタンプ数：${data.count ?? ''}個</small>${completeMsg}`;
-        msg.className = 'status-success';
-      } else if (data.status === 'already_exchanged') {
-        const completeMsg = data.complete
-          ? '<br><small style="color:#1a73e8;font-weight:normal;">🏆 コンプリート賞エントリー済み</small>'
-          : '';
-        msg.innerHTML = `⚠️ 交換済み<br><small style="font-weight:normal;color:#555;">この方はすでに3ヵ所賞を受け取っています</small>${completeMsg}`;
-        msg.className = 'status-already';
-      } else if (data.status === 'not_enough') {
-        msg.innerHTML = `❌ スタンプ不足<br><small style="font-weight:normal;color:#555;">現在 ${data.count}個 ／ 3個以上必要</small>`;
-        msg.className = 'status-lack';
-      } else {
-        msg.innerHTML = `❓ 不明なエラー<br><small>${JSON.stringify(data)}</small>`;
-        msg.className = 'status-error';
-      }
-      retryBtn.style.display = 'block';
-    }
-
-    function resetScanner() {
-      isScanning = true;
-      scanLocked = false;
-      scanLine.style.display = 'block';
-      retryBtn.style.display = 'none';
-      msg.innerText = 'QRコードを枠内に収めてください';
-      msg.className = 'status-wait';
       requestAnimationFrame(tick);
     }
 
-    startCamera();
+    async function handleExchange(userId) {
+      msg.innerHTML = '<div class="loading-spinner"></div>照会中...';
+      msg.className = 'status-info';
+
+      try {
+        // MakeのWebhookへデータを送信
+        const response = await fetch(`${scriptUrl}?userId=${userId}&staffId=${staffId}`);
+        
+        if (!response.ok) throw new Error("通信エラー");
+
+        const data = await response.json();
+
+        if (data.status === 'success') {
+          msg.innerHTML = `✅ 交換完了！<br><span style="font-size:1.5rem">景品をお渡しください</span><br><small>ユーザー: ${userId}</small>`;
+          msg.className = 'status-success';
+        } else if (data.status === 'already_exchanged') {
+          msg.innerHTML = `⚠️ 交換済み<br>この方はすでに景品を受け取っています`;
+          msg.className = 'status-already';
+        } else {
+          msg.innerHTML = `❌ エラー<br>${data.message || '不明なエラー'}`;
+          msg.className = 'status-error';
+        }
+      } catch (err) {
+        msg.innerHTML = `❌ 通信失敗<br>ネットワークを確認してください`;
+        msg.className = 'status-error';
+      }
+
+      // 5秒後にスキャン再開
+      setTimeout(() => {
+        msg.innerText = "QRコードをスキャンしてください";
+        msg.className = "status-info";
+        isScanning = true;
+      }, 5000);
+    }
+
+    initCamera();
   </script>
 </body>
 </html>
