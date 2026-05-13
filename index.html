@@ -40,7 +40,7 @@
 
     // URLパラメータから情報を取得
     const params = new URLSearchParams(window.location.search);
-    const STAFF_ID = params.get('staff') || 'user_scan';
+    const STAFF_ID = params.get('stamp_user_id') || 'user_scan';
     const USER_EMAIL = params.get('email') || ''; // Glideから渡されるメルアド
 
     let isScanning = true;
