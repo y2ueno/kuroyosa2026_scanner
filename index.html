@@ -3,64 +3,79 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>スタッフスキャナー（復旧版）</title>
-    <script src="https://unpkg.com/html5-qrcode"></script>
+    <title>検印スキャナー</title>
+    <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
     <style>
-        body { font-family: sans-serif; text-align: center; margin: 0; padding: 10px; background: #eee; }
-        /* 余計な装飾を削ぎ落とし、カメラが見えることを最優先 */
-        #reader { width: 100%; max-width: 500px; margin: 10px auto; background: white; }
-        .info { padding: 10px; background: white; margin-bottom: 10px; font-size: 0.9em; }
-        #result { margin-top: 10px; font-weight: bold; }
+        body { font-family: sans-serif; margin: 0; padding: 10px; background: #f4f4f4; text-align: center; }
+        .info-box { background: white; padding: 15px; border-radius: 8px; margin-bottom: 10px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+        .staff-id { font-weight: bold; color: #d32f2f; margin-bottom: 5px; }
+        /* カメラ表示エリアの枠を確保 */
+        #reader { width: 100%; max-width: 500px; margin: 0 auto; background: white; border: 1px solid #ccc; border-radius: 8px; overflow: hidden; min-height: 300px; }
+        #result { margin-top: 15px; font-weight: bold; padding: 10px; }
+        .success { color: #155724; background: #d4edda; }
     </style>
 </head>
 <body>
 
-    <div class="info">
-        <div id="staff-display">スタッフ確認中...</div>
+    <div class="info-box">
+        <div id="staff-display" class="staff-id">スタッフ確認中...</div>
+        <div style="font-size: 0.8em; color: #666;">QRコードをスキャンしてください</div>
     </div>
 
     <div id="reader"></div>
-    <div id="result">QRコードをスキャンしてください</div>
+
+    <div id="result"></div>
 
     <script>
-        const WEBHOOK_URL = 'https://hook.us1.make.com/xxxxxxxxxxxxxxxxxxxxxxxx';
+        const WEBHOOK_URL = 'https://hook.us1.make.com/xxxxxxxxxxxxxxxxxxxxxxxx'; // ★MakeのURLを確認
 
-        // 1. パラメータ取得（ここは今完成した「staff」と「email」を使う）
         const params = new URLSearchParams(window.location.search);
         const STAFF_ID = params.get('staff') || '';
         const STAFF_EMAIL = params.get('email') || '';
 
-        const infoDisplay = document.getElementById('staff-display');
-        if (STAFF_EMAIL && STAFF_ID) {
-            infoDisplay.innerText = `スタッフ: ${STAFF_EMAIL} (${STAFF_ID})`;
-        } else {
-            infoDisplay.innerHTML = `<span style="color:red;">認証情報なし</span>`;
+        document.getElementById('staff-display').innerText = `スタッフ: ${STAFF_EMAIL} (${STAFF_ID})`;
+
+        // --- 公式の「標準スキャナー」モードを使用 ---
+        // このモードは、カメラの許可ボタンなどをライブラリが自動で生成するため、
+        // ブラウザの制限に最も強く、ブラックアウトしにくいです。
+        function onScanSuccess(decodedText) {
+            // スキャン成功時
+            scanner.clear(); // スキャンを停止
+            document.getElementById('result').innerText = "送信中...";
+            document.getElementById('result').className = "";
+
+            const finalUrl = `${WEBHOOK_URL}?scannedUserId=${encodeURIComponent(decodedText)}&staffId=${encodeURIComponent(STAFF_ID)}&staffEmail=${encodeURIComponent(STAFF_EMAIL)}`;
+
+            fetch(finalUrl).then(response => {
+                if (response.ok) {
+                    document.getElementById('result').innerText = "【成功】送信完了しました";
+                    document.getElementById('result').className = "success";
+                    // 2秒後にページをリロードして次のスキャンへ
+                    setTimeout(() => location.reload(), 2000);
+                }
+            }).catch(err => {
+                document.getElementById('result').innerText = "通信エラー: " + err;
+            });
         }
 
-        // 2. 24時間前の「一番シンプルだった起動方法」に戻す
-        const html5QrCode = new html5Qrcode("reader");
-        
-        // ページ読み込みと同時に開始
-        html5QrCode.start(
-            { facingMode: "environment" }, 
-            { fps: 10, qrbox: { width: 250, height: 250 } },
-            (decodedText) => {
-                // スキャン成功時
-                html5QrCode.stop();
-                document.getElementById('result').innerText = "送信中...";
+        function onScanFailure(error) {
+            // スキャン中（読み取り失敗時）は何もしない
+        }
 
-                const finalUrl = `${WEBHOOK_URL}?scannedUserId=${encodeURIComponent(decodedText)}&staffId=${encodeURIComponent(STAFF_ID)}&staffEmail=${encodeURIComponent(STAFF_EMAIL)}`;
+        // スキャナーの初期化
+        let scanner = new Html5QrcodeScanner(
+            "reader", 
+            { 
+                fps: 10, 
+                qrbox: { width: 250, height: 250 },
+                rememberLastUsedCamera: true, // 最後に使ったカメラを覚える
+                aspectRatio: 1.0
+            }, 
+            /* verbose= */ false
+        );
 
-                fetch(finalUrl).then(response => {
-                    if (response.ok) {
-                        document.getElementById('result').innerText = "成功：保存されました";
-                        setTimeout(() => location.reload(), 2000); // 成功したらリロードして再待機
-                    }
-                });
-            }
-        ).catch(err => {
-            document.getElementById('result').innerText = "カメラ起動エラー: " + err;
-        });
+        // 実行
+        scanner.render(onScanSuccess, onScanFailure);
     </script>
 </body>
 </html>
