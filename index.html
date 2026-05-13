@@ -2,24 +2,57 @@
 <html lang="ja">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>検印スキャナー</title>
     <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
     <style>
+        * { box-sizing: border-box; }
         body { font-family: sans-serif; margin: 0; padding: 10px; background: #f4f4f4; text-align: center; }
         .info-box { background: white; padding: 15px; border-radius: 8px; margin-bottom: 10px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
-        .staff-id { font-weight: bold; color: #d32f2f; margin-bottom: 5px; }
-        /* カメラ表示エリアの枠を確保 */
-        #reader { width: 100%; max-width: 500px; margin: 0 auto; background: white; border: 1px solid #ccc; border-radius: 8px; overflow: hidden; min-height: 300px; }
-        #result { margin-top: 15px; font-weight: bold; padding: 10px; }
-        .success { color: #155724; background: #d4edda; }
+        .staff-id { font-weight: bold; color: #d32f2f; margin-bottom: 5px; font-size: 1.1em; }
+        
+        /* カメラ表示エリア */
+        #reader { 
+            width: 100%; 
+            max-width: 500px; 
+            margin: 0 auto; 
+            background: white; 
+            border: 1px solid #ccc; 
+            border-radius: 8px; 
+            overflow: hidden; 
+            min-height: 300px; 
+        }
+
+        #result { 
+            margin-top: 15px; 
+            font-weight: bold; 
+            padding: 12px; 
+            border-radius: 4px;
+            min-height: 1.5em;
+        }
+        .success { color: #155724; background: #d4edda; border: 1px solid #c3e6cb; }
+        .error { color: #721c24; background: #f8d7da; border: 1px solid #f5c6cb; }
+        
+        /* 標準UI内のボタンを押しやすく調整 */
+        #reader button {
+            padding: 10px 20px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            font-weight: bold;
+            background-color: #1a73e8;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            margin-top: 10px;
+        }
     </style>
 </head>
 <body>
 
     <div class="info-box">
         <div id="staff-display" class="staff-id">スタッフ確認中...</div>
-        <div style="font-size: 0.8em; color: #666;">QRコードをスキャンしてください</div>
+        <div style="font-size: 0.85em; color: #666;">QRコードをスキャンしてください</div>
     </div>
 
     <div id="reader"></div>
@@ -27,55 +60,68 @@
     <div id="result"></div>
 
     <script>
-        const WEBHOOK_URL = 'https://hook.us1.make.com/xxxxxxxxxxxxxxxxxxxxxxxx'; // ★MakeのURLを確認
+        // --- 設定エリア ---
+        const WEBHOOK_URL = 'https://hook.us2.make.com/2latx26ux6bo7bhfvfv3cmxs5i2p7xbh'; 
 
+        // URLパラメータからスタッフ情報を取得
         const params = new URLSearchParams(window.location.search);
         const STAFF_ID = params.get('staff') || '';
         const STAFF_EMAIL = params.get('email') || '';
 
-        document.getElementById('staff-display').innerText = `スタッフ: ${STAFF_EMAIL} (${STAFF_ID})`;
+        // 画面にスタッフ情報を表示
+        const infoDisplay = document.getElementById('staff-display');
+        if (STAFF_ID) {
+            infoDisplay.innerText = `スタッフ: ${STAFF_EMAIL || 'IDのみ'} (${STAFF_ID})`;
+        } else {
+            infoDisplay.innerHTML = `<span style="color:red;">認証情報がありません</span>`;
+        }
 
-        // --- 公式の「標準スキャナー」モードを使用 ---
-        // このモードは、カメラの許可ボタンなどをライブラリが自動で生成するため、
-        // ブラウザの制限に最も強く、ブラックアウトしにくいです。
+        // スキャン成功時の処理
         function onScanSuccess(decodedText) {
-            // スキャン成功時
-            scanner.clear(); // スキャンを停止
-            document.getElementById('result').innerText = "送信中...";
-            document.getElementById('result').className = "";
+            // 二重送信防止のためにスキャナーを停止
+            html5QrcodeScanner.clear(); 
+            
+            const resultDisplay = document.getElementById('result');
+            resultDisplay.innerText = "データ送信中...";
+            resultDisplay.className = "";
 
+            // パラメータを組み立て
             const finalUrl = `${WEBHOOK_URL}?scannedUserId=${encodeURIComponent(decodedText)}&staffId=${encodeURIComponent(STAFF_ID)}&staffEmail=${encodeURIComponent(STAFF_EMAIL)}`;
 
-            fetch(finalUrl).then(response => {
-                if (response.ok) {
-                    document.getElementById('result').innerText = "【成功】送信完了しました";
-                    document.getElementById('result').className = "success";
-                    // 2秒後にページをリロードして次のスキャンへ
-                    setTimeout(() => location.reload(), 2000);
-                }
-            }).catch(err => {
-                document.getElementById('result').innerText = "通信エラー: " + err;
-            });
+            // Makeへ送信
+            fetch(finalUrl)
+                .then(response => {
+                    if (response.ok) {
+                        resultDisplay.innerText = "【成功】保存されました";
+                        resultDisplay.className = "success";
+                        // 2.5秒後に自動リロードして次のスキャンへ
+                        setTimeout(() => location.reload(), 2500);
+                    } else {
+                        resultDisplay.innerText = "【失敗】サーバーエラーが発生しました";
+                        resultDisplay.className = "error";
+                    }
+                })
+                .catch(err => {
+                    resultDisplay.innerText = "通信エラー: ネット接続を確認してください";
+                    resultDisplay.className = "error";
+                    console.error(err);
+                });
         }
 
-        function onScanFailure(error) {
-            // スキャン中（読み取り失敗時）は何もしない
-        }
-
-        // スキャナーの初期化
-        let scanner = new Html5QrcodeScanner(
+        // スキャナーの初期化設定
+        let html5QrcodeScanner = new Html5QrcodeScanner(
             "reader", 
             { 
                 fps: 10, 
                 qrbox: { width: 250, height: 250 },
-                rememberLastUsedCamera: true, // 最後に使ったカメラを覚える
+                rememberLastUsedCamera: true,
                 aspectRatio: 1.0
             }, 
-            /* verbose= */ false
+            false
         );
 
-        // 実行
-        scanner.render(onScanSuccess, onScanFailure);
+        // スキャナーを描画
+        html5QrcodeScanner.render(onScanSuccess);
     </script>
 </body>
 </html>
