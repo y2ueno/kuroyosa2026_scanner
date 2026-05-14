@@ -1,6 +1,57 @@
 <!DOCTYPE html>
 <html lang="ja">
+<head<!DOCTYPE html>
+<html lang="ja">
 <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>スタッフスキャナー</title>
+    <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
+    <style>
+        body { font-family: sans-serif; margin: 0; padding: 10px; background: #f4f4f4; text-align: center; }
+        .info-box { background: white; padding: 15px; border-radius: 8px; margin-bottom: 10px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+        #reader { width: 100%; max-width: 500px; margin: 0 auto; background: white; border: 1px solid #ccc; border-radius: 8px; min-height: 300px; }
+        #result { margin-top: 15px; font-weight: bold; padding: 10px; }
+        .success { color: #155724; background: #d4edda; }
+    </style>
+</head>
+<body>
+    <div class="info-box">
+        <div id="staff-display" style="font-weight:bold; color:#d32f2f;">スタッフ確認中...</div>
+    </div>
+    <div id="reader"></div>
+    <div id="result"></div>
+
+    <script>
+        // スタッフ用 Webhook URL
+        const WEBHOOK_URL = 'https://hook.us2.make.com/2latx26ux6bo7bhfvfv3cmxs5i2p7xbh'; 
+
+        const params = new URLSearchParams(window.location.search);
+        const STAFF_ID = params.get('staff') || '';
+        const STAFF_EMAIL = params.get('email') || '';
+        document.getElementById('staff-display').innerText = `スタッフ: ${STAFF_EMAIL} (${STAFF_ID})`;
+
+        function onScanSuccess(decodedText) {
+            scanner.clear();
+            document.getElementById('result').innerText = "送信中...";
+
+            // Makeの現在の設定に合わせて「userId」と「staffId」という名前で送ります
+            const finalUrl = `${WEBHOOK_URL}?userId=${encodeURIComponent(decodedText)}&staffId=${encodeURIComponent(STAFF_ID)}&staffEmail=${encodeURIComponent(STAFF_EMAIL)}`;
+
+            fetch(finalUrl).then(response => {
+                if (response.ok) {
+                    document.getElementById('result').innerText = "【成功】保存されました";
+                    document.getElementById('result').className = "success";
+                    setTimeout(() => location.reload(), 2000);
+                }
+            });
+        }
+
+        let scanner = new Html5QrcodeScanner("reader", { fps: 10, qrbox: { width: 250, height: 250 } }, false);
+        scanner.render(onScanSuccess);
+    </script>
+</body>
+</html>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>検印スキャナー</title>
