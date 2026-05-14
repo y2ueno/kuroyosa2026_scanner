@@ -2,55 +2,63 @@
 <html lang="ja">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>参加者スキャナー</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>スタンプスキャナー</title>
     <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
     <style>
+        * { box-sizing: border-box; }
         body { font-family: sans-serif; margin: 0; padding: 10px; background: #f0f2f5; text-align: center; }
-        .info-box { background: white; padding: 15px; border-radius: 8px; margin-bottom: 10px; }
-        #reader { width: 100%; max-width: 500px; margin: 0 auto; background: white; border-radius: 8px; overflow: hidden; min-height: 300px; }
-        #result { margin-top: 15px; font-weight: bold; padding: 10px; }
-        .success { color: #155724; background: #d4edda; }
-        .error { color: #721c24; background: #f8d7da; }
+        .info-box { background: white; padding: 15px; border-radius: 8px; margin-bottom: 10px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+        .user-id { font-weight: bold; color: #1a73e8; font-size: 1.1em; }
+        #reader { width: 100%; max-width: 500px; margin: 0 auto; background: white; border: 1px solid #ccc; border-radius: 8px; overflow: hidden; min-height: 300px; }
+        #result { margin-top: 15px; font-weight: bold; padding: 12px; border-radius: 4px; min-height: 1.5em; }
+        .success { color: #155724; background: #d4edda; border: 1px solid #c3e6cb; }
+        .error { color: #721c24; background: #f8d7da; border: 1px solid #f5c6cb; }
+        #reader button { padding: 10px 20px; background-color: #1a73e8; color: white; border: none; border-radius: 4px; font-weight: bold; margin-top: 10px; }
     </style>
 </head>
 <body>
 
     <div class="info-box">
-        <div id="user-display" style="font-weight:bold; color:#1a73e8;">参加者確認中...</div>
-        <div style="font-size: 0.8em; color: #666;">スタンプ設置場所のQRを読んでください</div>
+        <div id="user-display" class="user-id">参加者確認中...</div>
+        <div style="font-size: 0.85em; color: #666; margin-top: 5px;">スタンプ用QRをスキャンしてください</div>
     </div>
 
     <div id="reader"></div>
     <div id="result"></div>
 
     <script>
-        // ★★★ここが「ユーザー用」のWebhook URLになっているか確認！★★★
-        const WEBHOOK_URL = 'https://hook.us2.make.com/xxxxxxxxxxxxxxxx'; 
+        // --- 参加者用 Webhook URL ---
+        const WEBHOOK_URL = 'https://hook.us2.make.com/m0vinx83pe2fmwwnt4g3r83fiak6r117'; 
 
         const params = new URLSearchParams(window.location.search);
-        const STAMP_USER_ID = params.get('stamp_user_id') || '';
+        const STAMP_USER_ID = params.get('stamp_user_id') || ''; 
         const EMAIL = params.get('email') || '';
 
-        document.getElementById('user-display').innerText = `参加者: ${EMAIL} (${STAMP_USER_ID})`;
+        const infoDisplay = document.getElementById('user-display');
+        if (STAMP_USER_ID) {
+            infoDisplay.innerText = `参加者: ${EMAIL} (${STAMP_USER_ID})`;
+        } else {
+            infoDisplay.innerHTML = `<span style="color:red;">参加者情報がありません</span>`;
+        }
 
         function onScanSuccess(decodedText) {
-            scanner.clear();
+            html5QrcodeScanner.clear();
             const resultDisplay = document.getElementById('result');
             resultDisplay.innerText = "送信中...";
+            resultDisplay.className = "";
 
-            // パラメータ名を「stamp_user_id」に統一して送信
+            // 送信パラメータを stamp_user_id に統一
             const finalUrl = `${WEBHOOK_URL}?spotId=${encodeURIComponent(decodedText)}&stamp_user_id=${encodeURIComponent(STAMP_USER_ID)}&email=${encodeURIComponent(EMAIL)}`;
 
             fetch(finalUrl)
-                .then(async response => {
+                .then(response => {
                     if (response.ok) {
-                        resultDisplay.innerText = "成功：スタンプをゲットしました！";
+                        resultDisplay.innerText = "【成功】スタンプを獲得しました！";
                         resultDisplay.className = "success";
                         setTimeout(() => location.reload(), 3000);
                     } else {
-                        const errorMsg = await response.text();
-                        resultDisplay.innerText = "エラー: " + errorMsg;
+                        resultDisplay.innerText = "【失敗】サーバーエラー（Makeの設定を確認してください）";
                         resultDisplay.className = "error";
                     }
                 })
@@ -60,8 +68,10 @@
                 });
         }
 
-        let scanner = new Html5QrcodeScanner("reader", { fps: 10, qrbox: { width: 250, height: 250 } }, false);
-        scanner.render(onScanSuccess);
+        let html5QrcodeScanner = new Html5QrcodeScanner(
+            "reader", { fps: 10, qrbox: { width: 250, height: 250 } }, false
+        );
+        html5QrcodeScanner.render(onScanSuccess);
     </script>
 </body>
 </html>
