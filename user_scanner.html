@@ -3,59 +3,62 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>よさこい2026 スタンプスキャナー</title>
+    <title>最終確認用スキャナー</title>
     <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
     <style>
-        * { box-sizing: border-box; }
-        body { font-family: sans-serif; margin: 0; padding: 10px; background: #f0f2f5; text-align: center; }
-        .info-box { background: white; padding: 15px; border-radius: 8px; margin-bottom: 10px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
-        .user-id { font-weight: bold; color: #1a73e8; font-size: 1.1em; }
-        #reader { width: 100%; max-width: 500px; margin: 0 auto; background: white; border: 1px solid #ccc; border-radius: 8px; overflow: hidden; min-height: 300px; }
-        #result { margin-top: 15px; font-weight: bold; padding: 12px; border-radius: 4px; min-height: 1.5em; }
+        body { font-family: sans-serif; margin: 0; padding: 0; background: #f0f2f5; text-align: center; }
+        /* 視覚的に「最新」か一目でわかるように、一番上に黄色い帯を出します */
+        .ver-header { background: yellow; color: black; font-weight: bold; padding: 10px; border-bottom: 2px solid red; font-size: 12px; }
+        .info-box { background: white; padding: 15px; margin: 10px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+        #reader { width: 90%; max-width: 500px; margin: 20px auto; background: white; border: 1px solid #ccc; min-height: 250px; }
+        #result { margin: 20px; font-weight: bold; padding: 12px; border-radius: 4px; }
         .success { color: #155724; background: #d4edda; border: 1px solid #c3e6cb; }
         .error { color: #721c24; background: #f8d7da; border: 1px solid #f5c6cb; }
     </style>
 </head>
 <body>
+    <div class="ver-header">【最新版】最終テストコード (22:20更新)</div>
+
     <div class="info-box">
-        <div id="user-display" class="user-id">参加者確認中...</div>
+        <div id="user-display" style="font-weight:bold; color:#1a73e8;">読込中...</div>
     </div>
+
     <div id="reader"></div>
     <div id="result"></div>
 
     <script>
-        const WEBHOOK_URL = 'https://hook.us2.make.com/m0vinx83pe2fmwwnt4g3r83fiak6r117'; 
+        const WEBHOOK_URL = 'https://hook.us2.make.com/m0vinx83pe2fmwwnt4g3r83fiak6r117';
         const params = new URLSearchParams(window.location.search);
-        const STAMP_USER_ID = params.get('stamp_user_id') || ''; 
-        const EMAIL = params.get('email') || '';
+        const STAMP_USER_ID = params.get('stamp_user_id') || 'ID未設定';
+        const EMAIL = params.get('email') || 'メール未設定';
 
-        document.getElementById('user-display').innerText = STAMP_USER_ID ? `参加者: ${EMAIL} (${STAMP_USER_ID})` : "参加者情報なし";
+        document.getElementById('user-display').innerText = `参加者: ${EMAIL} (${STAMP_USER_ID})`;
 
         function onScanSuccess(decodedText) {
             html5QrcodeScanner.clear();
             const resultDisplay = document.getElementById('result');
-            resultDisplay.innerText = "通信中...";
+            resultDisplay.innerText = "Makeへ送信中...";
+            resultDisplay.className = "";
 
-            // 【重要】ここをバッククォート（ ` ）に修正しました
             const finalUrl = `${WEBHOOK_URL}?spotId=${encodeURIComponent(decodedText)}&stamp_user_id=${encodeURIComponent(STAMP_USER_ID)}&email=${encodeURIComponent(EMAIL)}`;
 
             fetch(finalUrl)
-                .then(response => {
-                    if (response.ok) {
-                        resultDisplay.innerText = "【成功】スタンプを獲得しました！";
+                .then(res => {
+                    if (res.ok) {
+                        resultDisplay.innerText = "【成功】Makeに届きました！";
                         resultDisplay.className = "success";
                     } else {
-                        resultDisplay.innerText = "【失敗】Make設定エラー";
+                        resultDisplay.innerText = "【失敗】Makeの設定を確認 (Status: " + res.status + ")";
                         resultDisplay.className = "error";
                     }
                 })
                 .catch(err => {
-                    resultDisplay.innerText = "通信エラー: Webhookに届いていません";
+                    resultDisplay.innerText = "【エラー】Makeに接続できませんでした";
                     resultDisplay.className = "error";
                 });
         }
 
-        let html5QrcodeScanner = new Html5QrcodeScanner("reader", { fps: 10, qrbox: 250 }, false);
+        const html5QrcodeScanner = new Html5QrcodeScanner("reader", { fps: 10, qrbox: 250 });
         html5QrcodeScanner.render(onScanSuccess);
     </script>
 </body>
