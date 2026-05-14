@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>スタンプスキャナー v2.0</title>
+    <title>よさこい2026 スタンプスキャナー</title>
     <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
     <style>
         * { box-sizing: border-box; }
@@ -28,7 +28,7 @@
     <div id="result"></div>
 
     <script>
-        // --- 参加者用 Webhook URL (確定) ---
+        // --- 参加者用 Webhook URL ---
         const WEBHOOK_URL = 'https://hook.us2.make.com/m0vinx83pe2fmwwnt4g3r83fiak6r117'; 
 
         const params = new URLSearchParams(window.location.search);
@@ -45,13 +45,11 @@
         function onScanSuccess(decodedText) {
             html5QrcodeScanner.clear();
             const resultDisplay = document.getElementById('result');
-            resultDisplay.innerText = "データ送信中...";
+            resultDisplay.innerText = "通信中...";
             resultDisplay.className = "";
 
-            // --- 修正箇所：バッククォートを使用し、変数を正しく展開 ---
+            // --- 修正箇所: バッククォートを使用し、変数を確実にURLへ埋め込みます ---
             const finalUrl = `${WEBHOOK_URL}?spotId=${encodeURIComponent(decodedText)}&stamp_user_id=${encodeURIComponent(STAMP_USER_ID)}&email=${encodeURIComponent(EMAIL)}`;
-
-            console.log("Sending to:", finalUrl); // デバッグ用
 
             fetch(finalUrl)
                 .then(response => {
@@ -60,12 +58,12 @@
                         resultDisplay.className = "success";
                         setTimeout(() => location.reload(), 3000);
                     } else {
-                        resultDisplay.innerText = "【失敗】Makeの設定エラー (Status: " + response.status + ")";
+                        resultDisplay.innerText = "【失敗】サーバーエラー (Status: " + response.status + ")";
                         resultDisplay.className = "error";
                     }
                 })
                 .catch(err => {
-                    resultDisplay.innerText = "通信エラー: Webhookに届いていません";
+                    resultDisplay.innerText = "通信エラー: Webhookに接続できません";
                     resultDisplay.className = "error";
                 });
         }
