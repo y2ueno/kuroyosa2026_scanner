@@ -3,8 +3,8 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>カメラデバッグ版</title>
-    <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
+    <title>カメラ復活テスト</title>
+    <script src="https://cdn.jsdelivr.net/npm/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
     <style>
         body { font-family: sans-serif; margin: 0; padding: 0; background: #f0f2f5; text-align: center; }
         .ver-header { background: #333; color: white; padding: 5px; font-size: 10px; }
@@ -12,60 +12,71 @@
         #result { margin: 15px; font-weight: bold; padding: 12px; border-radius: 4px; }
         .success { color: #155724; background: #d4edda; }
         .error { color: #721c24; background: #f8d7da; }
-        #cam-error { color: red; font-size: 12px; margin: 10px; }
+        .retry-btn { background: #1a73e8; color: white; border: none; padding: 10px 20px; border-radius: 5px; margin-top: 10px; cursor: pointer; }
     </style>
 </head>
 <body>
-    <div class="ver-header">Ver: 23:05 (Camera Debug Mode)</div>
-    <div id="cam-error"></div> <div id="reader"></div>
+    <div class="ver-header">Ver: 23:10 (Camera Recovery Mode)</div>
+    
+    <div id="status-msg" style="color: red; padding: 10px; font-size: 14px;"></div>
+    <button id="retry-load" class="retry-btn" style="display:none;" onclick="location.reload()">再読み込み</button>
+
+    <div id="reader"></div>
     <div id="result"></div>
 
     <script>
         const WEBHOOK_URL = 'https://hook.us2.make.com/m0vinx83pe2fmwwnt4g3r83fiak6r117';
         const params = new URLSearchParams(window.location.search);
-        const STAMP_USER_ID = params.get('stamp_user_id') || 'No ID';
-        const EMAIL = params.get('email') || 'No Email';
+        const STAMP_USER_ID = params.get('stamp_user_id') || 'ID不明';
+        const EMAIL = params.get('email') || 'メール不明';
 
         function onScanSuccess(decodedText) {
-            // スキャン成功時の処理（ここは変更なし）
             const resultDisplay = document.getElementById('result');
             resultDisplay.innerText = "通信中...";
             const finalUrl = `${WEBHOOK_URL}?spotId=${encodeURIComponent(decodedText)}&stamp_user_id=${encodeURIComponent(STAMP_USER_ID)}&email=${encodeURIComponent(EMAIL)}`;
             
             fetch(finalUrl).then(res => {
                 if (res.ok) {
-                    document.getElementById('result').innerText = "【成功】記録しました";
-                    document.getElementById('result').className = "success";
+                    resultDisplay.innerText = "【成功】スタンプを記録しました！";
+                    resultDisplay.className = "success";
                 }
             }).catch(e => {
-                document.getElementById('result').innerText = "通信失敗";
-                document.getElementById('result').className = "error";
+                resultDisplay.innerText = "通信失敗";
+                resultDisplay.className = "error";
             });
         }
 
-        // カメラ起動処理を関数化
-        function startScanner() {
-            const config = { 
-                fps: 10, 
-                qrbox: { width: 250, height: 250 },
-                aspectRatio: 1.0
-            };
-
-            const html5QrcodeScanner = new Html5QrcodeScanner("reader", config, false);
+        function initScanner() {
+            const statusMsg = document.getElementById('status-msg');
             
-            html5QrcodeScanner.render(onScanSuccess, (errorMessage) => {
-                // スキャン中の細かいエラーは無視（QRが見つからない等）
+            // ライブラリが存在するか最終チェック
+            if (typeof Html5QrcodeScanner === "undefined") {
+                statusMsg.innerText = "部品の読み込みに失敗しました。下のボタンを押してください。";
+                document.getElementById('retry-load').style.display = "inline-block";
+                return;
+            }
+
+            statusMsg.innerText = "カメラを起動しています...";
+            statusMsg.style.color = "blue";
+
+            const html5QrcodeScanner = new Html5QrcodeScanner("reader", { 
+                fps: 10, 
+                qrbox: 250,
+                rememberLastUsedCamera: true,
+                supportedScanTypes: [Html5QrcodeScanType.SCAN_TYPE_CAMERA]
             });
+            
+            html5QrcodeScanner.render(onScanSuccess, (err) => {
+                // スキャン中の微細なエラーは表示しない
+            });
+
+            // 起動に成功したらメッセージを消す
+            setTimeout(() => { statusMsg.innerText = ""; }, 3000);
         }
 
-        // ページ読み込み完了後にカメラを起動
+        // ページが読み込まれてから1.5秒後に起動（Glideの動作安定待ち）
         window.onload = () => {
-            if (typeof Html5QrcodeScanner === "undefined") {
-                document.getElementById('cam-error').innerText = "エラー: ライブラリが読み込めていません。";
-            } else {
-                // 1秒待ってから起動（Web Embedの安定待ち）
-                setTimeout(startScanner, 1000);
-            }
+            setTimeout(initScanner, 1500);
         };
     </script>
 </body>
