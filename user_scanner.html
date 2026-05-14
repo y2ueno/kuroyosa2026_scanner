@@ -6,90 +6,117 @@
     <title>スタンプスキャナー</title>
     <script src="https://cdn.jsdelivr.net/npm/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
     <style>
-        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; margin: 0; padding: 0; background: #f8f9fa; color: #333; text-align: center; }
-        .header { background: #ffffff; padding: 20px 15px; box-shadow: 0 2px 4px rgba(0,0,0,0.05); margin-bottom: 20px; }
-        .user-info { font-size: 14px; color: #666; line-height: 1.6; }
-        .user-id { font-weight: bold; color: #1a73e8; font-size: 16px; }
-        
-        #reader { width: 92%; max-width: 500px; margin: 0 auto; background: white; border-radius: 12px; overflow: hidden; border: 1px solid #ddd; }
-        
-        #result-container { margin: 20px; padding: 20px; border-radius: 12px; display: none; }
-        /* 成功時のスタイル（緑） */
-        .success { background: #d4edda; color: #155724; border: 1px solid #c3e6cb; display: block !important; }
-        /* 重複時のスタイル（黄） */
-        .already { background: #fff3cd; color: #856404; border: 1px solid #ffeeba; display: block !important; }
-        
-        h2 { margin: 0 0 10px 0; font-size: 18px; }
-        .close-guide { font-size: 14px; margin-top: 10px; padding-top: 10px; border-top: 1px solid rgba(0,0,0,0.1); }
-        .loading-msg { color: #666; font-size: 14px; margin-top: 10px; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            margin: 0;
+            padding: 0;
+            background: #f8f9fa;
+            color: #333;
+            text-align: center;
+        }
+        .header {
+            background: #ffffff;
+            padding: 20px 15px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+            margin-bottom: 20px;
+            font-size: 14px;
+            color: #666;
+        }
+        #reader {
+            width: 92%;
+            max-width: 500px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 12px;
+            overflow: hidden;
+            border: 1px solid #ddd;
+        }
+        /* 結果表示エリア（最初から緑の成功スタイル） */
+        #result-container {
+            margin: 20px;
+            padding: 25px 20px;
+            border-radius: 12px;
+            display: none;
+            background: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+        /* 上野さん指定：既に取得済みのスタンプは無効です */
+        .disclaimer {
+            color: #dc3545;
+            font-weight: bold;
+            font-size: 16px;
+            margin-top: 20px;
+            padding-top: 15px;
+            border-top: 1px dashed rgba(220, 53, 69, 0.3);
+        }
+        .close-guide {
+            font-size: 13px;
+            color: #666;
+            margin-top: 15px;
+        }
+        .loading-msg {
+            color: #666;
+            font-size: 14px;
+            margin-top: 10px;
+        }
     </style>
 </head>
 <body>
 
 <div class="header">
-    <div class="user-info">
-        ログイン中: <span id="display-email">読み込み中...</span><br>
-        ユーザーID: <span id="display-id" class="user-id">---</span>
-    </div>
+    ログイン中: <span id="display-email">読み込み中...</span>
 </div>
 
 <div id="reader"></div>
 <div id="loading" class="loading-msg">カメラを起動しています...</div>
 
 <div id="result-container">
-    <h2 id="result-title">完了</h2>
-    <p id="result-text"></p>
-    <div id="close-instruction" class="close-guide">
-        <strong>【操作】</strong> 左上の「×」または「完了」を押してアプリに戻ってください。
+    <h2 style="margin: 0 0 10px 0; font-size: 22px;">✅ スタンプ獲得！</h2>
+    <p style="margin: 0; font-size: 16px;">正常に記録されました。</p>
+    
+    <div class="disclaimer">
+        ⚠️ 既に取得済みのスタンプは無効です
+    </div>
+    
+    <div class="close-guide">
+        左上の「×」または「完了」を押して<br>アプリに戻ってください。
     </div>
 </div>
 
 <script>
     const WEBHOOK_URL = 'https://hook.us2.make.com/m0vinx83pe2fmwwnt4g3r83fiak6r117';
+    
+    // URLからパラメータ取得
     const params = new URLSearchParams(window.location.search);
     const STAMP_USER_ID = params.get('stamp_user_id') || '---';
     const EMAIL = params.get('email') || '---';
 
     document.getElementById('display-email').innerText = EMAIL;
-    document.getElementById('display-id').innerText = STAMP_USER_ID;
 
+    // スキャン成功時の処理
     function onScanSuccess(decodedText) {
+        // 1. スキャナーを止めて非表示にする
         html5QrcodeScanner.clear();
         document.getElementById('reader').style.display = 'none';
         
-        const container = document.getElementById('result-container');
-        const title = document.getElementById('result-title');
-        const text = document.getElementById('result-text');
-        
-        container.style.display = 'block';
-        text.innerText = "通信中...";
+        // 2. 即座に成功画面を表示する
+        document.getElementById('result-container').style.display = 'block';
 
+        // 3. MakeのWebhookへデータを送信（バックグラウンドで実行）
         const finalUrl = `${WEBHOOK_URL}?spotId=${encodeURIComponent(decodedText)}&stamp_user_id=${encodeURIComponent(STAMP_USER_ID)}&email=${encodeURIComponent(EMAIL)}`;
-
+        
         fetch(finalUrl)
-            .then(res => res.text()) // ここでMakeからの「合言葉」をテキストとして受け取る
-            .then(responseText => {
-                if (responseText.includes("already")) {
-                    // ★Makeが「already」と返してきたら黄色い画面
-                    container.className = "already";
-                    title.innerText = "⚠️ 取得済み";
-                    text.innerText = "このスタンプは既に獲得しています。";
-                } else {
-                    // ★それ以外（successなど）なら緑の画面
-                    container.className = "success";
-                    title.innerText = "✅ スタンプ獲得！";
-                    text.innerText = "正常に記録されました。";
-                }
-            })
-            .catch(err => {
-                container.style.display = 'block';
-                container.style.background = '#f8d7da';
-                title.innerText = "⚠️ エラー";
-                text.innerText = "通信に失敗しました。";
-            });
+            .then(response => console.log("Data sent to Make"))
+            .catch(error => console.error("Network error, but display remains."));
     }
 
-    const html5QrcodeScanner = new Html5QrcodeScanner("reader", { fps: 10, qrbox: 250 });
+    // スキャナーの初期化
+    const html5QrcodeScanner = new Html5QrcodeScanner("reader", { 
+        fps: 10, 
+        qrbox: 250,
+        rememberLastUsedCamera: true
+    });
     
     window.onload = () => {
         setTimeout(() => {
@@ -98,5 +125,6 @@
         }, 1000);
     };
 </script>
+
 </body>
 </html>
