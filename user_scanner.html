@@ -2,126 +2,126 @@
 <html lang="ja">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>よさこい2026 スタンプスキャナー</title>
-    <script src="https://unpkg.com/html5-qrcode"></script>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>検印スキャナー</title>
+    <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
     <style>
-        body {
-            font-family: sans-serif;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            background-color: #f0f2f5;
-            margin: 0;
-            padding: 20px;
+        * { box-sizing: border-box; }
+        body { font-family: sans-serif; margin: 0; padding: 10px; background: #f4f4f4; text-align: center; }
+        .info-box { background: white; padding: 15px; border-radius: 8px; margin-bottom: 10px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+        .staff-id { font-weight: bold; color: #d32f2f; margin-bottom: 5px; font-size: 1.1em; }
+        
+        /* カメラ表示エリア */
+        #reader { 
+            width: 100%; 
+            max-width: 500px; 
+            margin: 0 auto; 
+            background: white; 
+            border: 1px solid #ccc; 
+            border-radius: 8px; 
+            overflow: hidden; 
+            min-height: 300px; 
         }
-        #reader {
-            width: 100%;
-            max-width: 500px;
-            background: white;
-            padding: 10px;
-            border-radius: 8px;
-            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
-        }
-        #info {
-            margin-top: 20px;
-            padding: 15px;
-            background: white;
-            border-radius: 8px;
-            width: 100%;
-            max-width: 500px;
-            text-align: center;
-        }
-        .user-info {
-            color: #1a73e8;
-            font-weight: bold;
-            font-size: 1.1em;
-            margin-bottom: 10px;
-        }
-        #result {
-            margin-top: 10px;
-            font-weight: bold;
-            padding: 10px;
+
+        #result { 
+            margin-top: 15px; 
+            font-weight: bold; 
+            padding: 12px; 
             border-radius: 4px;
+            min-height: 1.5em;
         }
-        .success { background-color: #d4edda; color: #155724; }
-        .error { background-color: #f8d7da; color: #721c24; }
+        .success { color: #155724; background: #d4edda; border: 1px solid #c3e6cb; }
+        .error { color: #721c24; background: #f8d7da; border: 1px solid #f5c6cb; }
+        
+        /* 標準UI内のボタンを押しやすく調整 */
+        #reader button {
+            padding: 10px 20px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            font-weight: bold;
+            background-color: #1a73e8;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            margin-top: 10px;
+        }
     </style>
 </head>
 <body>
 
-    <h2>スタンプスキャナー</h2>
-
-    <div id="info">
-        <div id="participant-display" class="user-info">参加者確認中...</div>
-        <div id="result">QRコードをスキャンしてください</div>
+    <div class="info-box">
+        <div id="staff-display" class="staff-id">スタッフ確認中...</div>
+        <div style="font-size: 0.85em; color: #666;">QRコードをスキャンしてください</div>
     </div>
 
     <div id="reader"></div>
 
+    <div id="result"></div>
+
     <script>
         // --- 設定エリア ---
-        const WEBHOOK_URL = 'https://hook.us2.make.com/m0vinx83pe2fmwwnt4g3r83fiak6r117'; // ★MakeのURLに差し替えてください
+        const WEBHOOK_URL = 'https://hook.us2.make.com/2latx26ux6bo7bhfvfv3cmxs5i2p7xbh'; 
 
-        // 1. URLパラメータから 13日の設計どおりの名前で取得
+        // URLパラメータからスタッフ情報を取得
         const params = new URLSearchParams(window.location.search);
-        const STAMP_USER_ID = params.get('stamp_user_id') || ''; 
-        const USER_EMAIL = params.get('email') || '';
+        const STAFF_ID = params.get('staff') || '';
+        const STAFF_EMAIL = params.get('email') || '';
 
-        // 画面上部への表示
-        const infoDisplay = document.getElementById('participant-display');
-        if (USER_EMAIL) {
-            infoDisplay.innerText = `参加者: ${USER_EMAIL} (${STAMP_USER_ID})`;
+        // 画面にスタッフ情報を表示
+        const infoDisplay = document.getElementById('staff-display');
+        if (STAFF_ID) {
+            infoDisplay.innerText = `スタッフ: ${STAFF_EMAIL || 'IDのみ'} (${STAFF_ID})`;
         } else {
-            infoDisplay.innerHTML = `<span style="color:red;">参加者情報がありません</span>`;
+            infoDisplay.innerHTML = `<span style="color:red;">認証情報がありません</span>`;
         }
 
-        // 2. スキャナーの設定
-        const html5QrCode = new html5Qrcode("reader");
-        const config = { fps: 10, qrbox: { width: 250, height: 250 } };
-
-        const onScanSuccess = (decodedText) => {
-            // 重複送信防止のため一旦停止
-            html5QrCode.stop();
+        // スキャン成功時の処理
+        function onScanSuccess(decodedText) {
+            // 二重送信防止のためにスキャナーを停止
+            html5QrcodeScanner.clear(); 
             
             const resultDisplay = document.getElementById('result');
-            resultDisplay.innerText = "送信中...";
+            resultDisplay.innerText = "データ送信中...";
             resultDisplay.className = "";
 
-            // 3. Makeに送るURLを作成（すべて stamp_user_id に統一）
-            const userId = decodedText; // QRコードの中身
-            const finalUrl = `${WEBHOOK_URL}?userId=${encodeURIComponent(userId)}&stamp_user_id=${encodeURIComponent(STAMP_USER_ID)}&userEmail=${encodeURIComponent(USER_EMAIL)}`;
+            // パラメータを組み立て
+            const finalUrl = `${WEBHOOK_URL}?scannedUserId=${encodeURIComponent(decodedText)}&staffId=${encodeURIComponent(STAFF_ID)}&staffEmail=${encodeURIComponent(STAFF_EMAIL)}`;
 
-            // 4. Webhook送信
+            // Makeへ送信
             fetch(finalUrl)
                 .then(response => {
                     if (response.ok) {
-                        resultDisplay.innerText = "スキャン成功！保存されました。";
+                        resultDisplay.innerText = "【成功】保存されました";
                         resultDisplay.className = "success";
+                        // 2.5秒後に自動リロードして次のスキャンへ
+                        setTimeout(() => location.reload(), 2500);
                     } else {
-                        resultDisplay.innerText = "保存に失敗しました。";
+                        resultDisplay.innerText = "【失敗】サーバーエラーが発生しました";
                         resultDisplay.className = "error";
                     }
                 })
                 .catch(err => {
-                    resultDisplay.innerText = "通信エラーが発生しました。";
+                    resultDisplay.innerText = "通信エラー: ネット接続を確認してください";
                     resultDisplay.className = "error";
-                })
-                .finally(() => {
-                    // 3秒後に再起動
-                    setTimeout(() => {
-                        resultDisplay.innerText = "QRコードをスキャンしてください";
-                        resultDisplay.className = "";
-                        html5QrCode.start({ facingMode: "environment" }, config, onScanSuccess);
-                    }, 3000);
+                    console.error(err);
                 });
-        };
+        }
 
-        // スキャナー開始
-        html5QrCode.start({ facingMode: "environment" }, config, onScanSuccess)
-            .catch(err => {
-                document.getElementById('result').innerText = "カメラの起動に失敗しました。";
-            });
+        // スキャナーの初期化設定
+        let html5QrcodeScanner = new Html5QrcodeScanner(
+            "reader", 
+            { 
+                fps: 10, 
+                qrbox: { width: 250, height: 250 },
+                rememberLastUsedCamera: true,
+                aspectRatio: 1.0
+            }, 
+            false
+        );
+
+        // スキャナーを描画
+        html5QrcodeScanner.render(onScanSuccess);
     </script>
 </body>
 </html>
