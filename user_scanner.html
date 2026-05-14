@@ -14,10 +14,13 @@
         #reader { width: 92%; max-width: 500px; margin: 0 auto; background: white; border-radius: 12px; overflow: hidden; border: 1px solid #ddd; }
         
         #result-container { margin: 20px; padding: 20px; border-radius: 12px; display: none; }
+        /* 成功時のスタイル（緑） */
         .success { background: #d4edda; color: #155724; border: 1px solid #c3e6cb; display: block !important; }
-        .success h2 { margin: 0 0 10px 0; font-size: 18px; }
-        .close-guide { font-size: 14px; color: #155724; margin-top: 10px; padding-top: 10px; border-top: 1px solid rgba(0,0,0,0.1); }
+        /* 重複時のスタイル（黄） */
+        .already { background: #fff3cd; color: #856404; border: 1px solid #ffeeba; display: block !important; }
         
+        h2 { margin: 0 0 10px 0; font-size: 18px; }
+        .close-guide { font-size: 14px; margin-top: 10px; padding-top: 10px; border-top: 1px solid rgba(0,0,0,0.1); }
         .loading-msg { color: #666; font-size: 14px; margin-top: 10px; }
     </style>
 </head>
@@ -34,12 +37,10 @@
 <div id="loading" class="loading-msg">カメラを起動しています...</div>
 
 <div id="result-container">
-    <div id="result-content">
-        <h2 id="result-title">完了</h2>
-        <p id="result-text"></p>
-        <div id="close-instruction" class="close-guide" style="display:none;">
-            <strong>【操作】</strong> 左上の「×」または「完了」を押してアプリに戻ってください。
-        </div>
+    <h2 id="result-title">完了</h2>
+    <p id="result-text"></p>
+    <div id="close-instruction" class="close-guide">
+        <strong>【操作】</strong> 左上の「×」または「完了」を押してアプリに戻ってください。
     </div>
 </div>
 
@@ -49,18 +50,16 @@
     const STAMP_USER_ID = params.get('stamp_user_id') || '---';
     const EMAIL = params.get('email') || '---';
 
-    // ユーザー情報の表示
     document.getElementById('display-email').innerText = EMAIL;
     document.getElementById('display-id').innerText = STAMP_USER_ID;
 
     function onScanSuccess(decodedText) {
-        // 二重送信防止のためカメラを即停止
         html5QrcodeScanner.clear();
         document.getElementById('reader').style.display = 'none';
         
         const container = document.getElementById('result-container');
+        const title = document.getElementById('result-title');
         const text = document.getElementById('result-text');
-        const instruction = document.getElementById('close-instruction');
         
         container.style.display = 'block';
         text.innerText = "通信中...";
@@ -68,21 +67,25 @@
         const finalUrl = `${WEBHOOK_URL}?spotId=${encodeURIComponent(decodedText)}&stamp_user_id=${encodeURIComponent(STAMP_USER_ID)}&email=${encodeURIComponent(EMAIL)}`;
 
         fetch(finalUrl)
-            .then(res => {
-                if (res.ok) {
-                    container.className = "success";
-                    document.getElementById('result-title').innerText = "✅ スタンプ獲得！";
-                    text.innerText = "正常に記録されました。";
-                    instruction.style.display = "block"; // 閉じるガイダンスを表示
+            .then(res => res.text()) // ここでMakeからの「合言葉」をテキストとして受け取る
+            .then(responseText => {
+                if (responseText.includes("already")) {
+                    // ★Makeが「already」と返してきたら黄色い画面
+                    container.className = "already";
+                    title.innerText = "⚠️ 取得済み";
+                    text.innerText = "このスタンプは既に獲得しています。";
                 } else {
-                    throw new Error();
+                    // ★それ以外（successなど）なら緑の画面
+                    container.className = "success";
+                    title.innerText = "✅ スタンプ獲得！";
+                    text.innerText = "正常に記録されました。";
                 }
             })
             .catch(err => {
                 container.style.display = 'block';
                 container.style.background = '#f8d7da';
-                document.getElementById('result-title').innerText = "⚠️ エラー";
-                text.innerText = "通信に失敗しました。もう一度お試しください。";
+                title.innerText = "⚠️ エラー";
+                text.innerText = "通信に失敗しました。";
             });
     }
 
@@ -95,6 +98,5 @@
         }, 1000);
     };
 </script>
-
 </body>
 </html>
