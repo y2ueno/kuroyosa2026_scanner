@@ -14,41 +14,29 @@
         #result { margin-top: 15px; font-weight: bold; padding: 12px; border-radius: 4px; min-height: 1.5em; }
         .success { color: #155724; background: #d4edda; border: 1px solid #c3e6cb; }
         .error { color: #721c24; background: #f8d7da; border: 1px solid #f5c6cb; }
-        #reader button { padding: 10px 20px; background-color: #1a73e8; color: white; border: none; border-radius: 4px; font-weight: bold; margin-top: 10px; }
     </style>
 </head>
 <body>
-
     <div class="info-box">
         <div id="user-display" class="user-id">参加者確認中...</div>
-        <div style="font-size: 0.85em; color: #666; margin-top: 5px;">スタンプ用QRをスキャンしてください</div>
     </div>
-
     <div id="reader"></div>
     <div id="result"></div>
 
     <script>
-        // --- 参加者用 Webhook URL ---
         const WEBHOOK_URL = 'https://hook.us2.make.com/m0vinx83pe2fmwwnt4g3r83fiak6r117'; 
-
         const params = new URLSearchParams(window.location.search);
         const STAMP_USER_ID = params.get('stamp_user_id') || ''; 
         const EMAIL = params.get('email') || '';
 
-        const infoDisplay = document.getElementById('user-display');
-        if (STAMP_USER_ID) {
-            infoDisplay.innerText = `参加者: ${EMAIL} (${STAMP_USER_ID})`;
-        } else {
-            infoDisplay.innerHTML = `<span style="color:red;">参加者情報がありません</span>`;
-        }
+        document.getElementById('user-display').innerText = STAMP_USER_ID ? `参加者: ${EMAIL} (${STAMP_USER_ID})` : "参加者情報なし";
 
         function onScanSuccess(decodedText) {
             html5QrcodeScanner.clear();
             const resultDisplay = document.getElementById('result');
             resultDisplay.innerText = "通信中...";
-            resultDisplay.className = "";
 
-            // --- 修正箇所: バッククォートを使用し、変数を確実にURLへ埋め込みます ---
+            // 【重要】ここをバッククォート（ ` ）に修正しました
             const finalUrl = `${WEBHOOK_URL}?spotId=${encodeURIComponent(decodedText)}&stamp_user_id=${encodeURIComponent(STAMP_USER_ID)}&email=${encodeURIComponent(EMAIL)}`;
 
             fetch(finalUrl)
@@ -56,21 +44,18 @@
                     if (response.ok) {
                         resultDisplay.innerText = "【成功】スタンプを獲得しました！";
                         resultDisplay.className = "success";
-                        setTimeout(() => location.reload(), 3000);
                     } else {
-                        resultDisplay.innerText = "【失敗】サーバーエラー (Status: " + response.status + ")";
+                        resultDisplay.innerText = "【失敗】Make設定エラー";
                         resultDisplay.className = "error";
                     }
                 })
                 .catch(err => {
-                    resultDisplay.innerText = "通信エラー: Webhookに接続できません";
+                    resultDisplay.innerText = "通信エラー: Webhookに届いていません";
                     resultDisplay.className = "error";
                 });
         }
 
-        let html5QrcodeScanner = new Html5QrcodeScanner(
-            "reader", { fps: 10, qrbox: { width: 250, height: 250 } }, false
-        );
+        let html5QrcodeScanner = new Html5QrcodeScanner("reader", { fps: 10, qrbox: 250 }, false);
         html5QrcodeScanner.render(onScanSuccess);
     </script>
 </body>
