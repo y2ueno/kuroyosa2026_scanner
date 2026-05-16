@@ -26,10 +26,11 @@
             width: 92%;
             max-width: 500px;
             margin: 0 auto;
-            background: white;
+            background: #000; /* カメラ起動前は真っ黒にして違和感を無くす */
             border-radius: 12px;
             overflow: hidden;
             border: 1px solid #ddd;
+            min-height: 300px;
         }
         /* 結果表示エリア（最初から緑の成功スタイル） */
         #result-container {
@@ -41,7 +42,7 @@
             color: #155724;
             border: 1px solid #c3e6cb;
         }
-        /* 上野さん指定：既に取得済みのスタンプは無効です */
+        /* 既に取得済みのスタンプは無効です */
         .disclaimer {
             color: #dc3545;
             font-weight: bold;
@@ -94,10 +95,29 @@
 
     document.getElementById('display-email').innerText = EMAIL;
 
+    // スキャナーの初期化（Html5Qrcode クラスを直接制御）
+    const html5Qrcode = new Html5Qrcode("reader");
+    
+    const config = { 
+        fps: 10, 
+        qrbox: 250,
+        aspectRatio: 1.0
+    };
+
     // スキャン成功時の処理
     function onScanSuccess(decodedText) {
-        // 1. スキャナーを止めて非表示にする
-        html5QrcodeScanner.clear();
+        // 二重送信を物理的に防ぐため、即座にカメラのハードウェアストリームを停止させる
+        html5Qrcode.stop().then(() => {
+            processSuccess(decodedText);
+        }).catch(err => {
+            console.error("カメラ停止エラー", err);
+            processSuccess(decodedText); // 万が一停止に失敗しても送信・画面表示は強行する
+        });
+    }
+
+    // 画面切り替えとMakeへの送信
+    function processSuccess(decodedText) {
+        // 1. スキャナー表示エリアを非表示にする
         document.getElementById('reader').style.display = 'none';
         
         // 2. 即座に成功画面を表示する
@@ -111,19 +131,21 @@
             .catch(error => console.error("Network error, but display remains."));
     }
 
-    // スキャナーの初期化
-    const html5QrcodeScanner = new Html5QrcodeScanner("reader", { 
-        fps: 10, 
-        qrbox: 250,
-        rememberLastUsedCamera: true
-    });
-    
-    window.onload = () => {
+    // 画面が開いた瞬間に「背面カメラ」で自動起動する
+    window.addEventListener('DOMContentLoaded', () => {
         setTimeout(() => {
-            html5QrcodeScanner.render(onScanSuccess);
-            document.getElementById('loading').style.display = 'none';
-        }, 1000);
-    };
+            html5Qrcode.start(
+                { facingMode: "environment" }, // 💥ここでインカメラを拒否し、背面カメラを強制起動
+                config,
+                onScanSuccess
+            ).then(() => {
+                document.getElementById('loading').style.display = 'none';
+            }).catch(err => {
+                console.error("カメラ起動エラー:", err);
+                document.getElementById('loading').innerHTML = `<span style="color:red; font-weight:bold;">【エラー】カメラの起動に失敗しました。<br>ブラウザの設定でカメラ利用を許可してください。</span>`;
+            });
+        }, 1000); // 端末の準備時間を考慮して1秒待って安全に起動
+    });
 </script>
 
 </body>
